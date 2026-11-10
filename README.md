@@ -64,27 +64,32 @@ Here is an effective script to present TangleCode to judges or audiences in 60 s
 
 ## Interactive Streamlit Demo Overview
 
-The demo app ([`app.py`](app.py)) is organized into 4 interactive tabs:
+The demo app ([`app.py`](app.py)) starts from the **Dataset & Upload** page and seamlessly powers the remaining analysis tabs with the chosen dataset:
 
-### 1. 🧬 Live Braid
-- **Animated Weaving Strands**: 8 vibrant colored strands weaving across time with individual crossing markers.
-- **Jitter Noise Slider**: Live simulation of high-frequency sensor noise.
-- **Reidemeister Toggle**: Toggles live braid reduction on and off, with live metrics showing Raw Crossings, Reduced Crossings, and Annihilated Jitter.
+### 1. 📁 Dataset & Upload (Landing Page)
+- **Data Source Selection**:
+  - Upload custom CSV files (auto-isolates numeric sensor channels).
+  - Or choose from curated sample datasets:
+    - `Real 6-Axis Motion Sensor (data/real.csv)`
+    - `Synthetic 8-Channel IMU Stream`
+    - `Synthetic 4-Channel Correlated Stream`
+- **Signal Preview & Dimensions**: Immediate waveform visualization and channel overview.
+- **Binary Export**: Instant download buttons for `.tngl` binary packages (Rank-Only and Hybrid modes).
 
-### 2. 📊 Compression Benchmark
-- **Live Benchmarking**: Live measurement comparing Raw CSV, gzip, zstandard, Hysteresis, TangleCode Rank-Only, and TangleCode Hybrid.
+### 2. 🧬 Live Braid
+- **Active Dataset Weaving**: Visualizes the strands of the loaded dataset.
+- **Window Controls**: Sliders for window length, start offset, and optional added jitter.
+- **Reidemeister Toggle**: Live Reidemeister II reduction toggle with real-time metrics showing Raw Crossings, Reduced Crossings, and Annihilated Jitter.
+
+### 3. 📊 Compression Benchmark
+- **Benchmarking on Active Data**: Live measurement comparing Raw CSV, gzip, zstandard, Hysteresis, TangleCode Rank-Only, and TangleCode Hybrid.
 - **Interactive Plotly Visualizations**: Log-scale compressed size and compression ratio comparisons.
 - **Fidelity Metrics**: Kendall's rank correlation $\tau$ and amplitude RMSE.
 
-### 3. 🚨 Fault Detection
-- **Fault Injection Controls**: Simulate linear sensor drift or stuck/frozen channels on any selected channel.
+### 4. 🚨 Fault Detection
+- **Fault Injection on Active Data**: Inject linear sensor drift or stuck/frozen channels directly into any selected channel of the loaded dataset.
 - **Streaming Sliding Window Analysis**: Real-time trajectory of reduced word length per window with baseline $\pm k\sigma$ confidence bands and highlighted anomaly diamonds.
 - **Performance Metrics**: False positive rate (FPR) and detection delay reported live.
-
-### 4. 📁 Upload & Export
-- **Custom CSV Ingestion**: Drag and drop your own sensor CSV files.
-- **Topological Compression**: Immediate conversion to both Rank-Only and Hybrid `.tngl` formats.
-- **Binary Export**: Instant download buttons for `.tngl` binary packages.
 
 ---
 
