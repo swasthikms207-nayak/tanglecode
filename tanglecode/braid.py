@@ -296,3 +296,15 @@ def reduce_with_channels(
 
     return stack, cancelled
 
+
+__all__ = [
+    "ReductionResult",
+    "rank_vector",
+    "extract_braid_word",
+    "reduce_word",
+    "reduce_word_full",
+    "extract_crossings_with_channels",
+    "reduce_with_channels",
+]
+
+

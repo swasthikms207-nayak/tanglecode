@@ -2,6 +2,7 @@
 
 import io
 import struct
+import sys
 import tempfile
 from collections import Counter
 from pathlib import Path
@@ -11,50 +12,25 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
-try:
-    from tanglecode.anomaly import (
-        BraidAnomalyDetector,
-        diagnose_window_fault,
-        learn_channel_baseline,
-    )
-except ImportError:
-    import importlib
-    import tanglecode.anomaly
-    importlib.reload(tanglecode.anomaly)
-    from tanglecode.anomaly import (
-        BraidAnomalyDetector,
-        diagnose_window_fault,
-        learn_channel_baseline,
-    )
+# Ensure fresh tanglecode modules in persistent/watching Streamlit processes
+for mod_name in list(sys.modules.keys()):
+    if mod_name == "tanglecode" or mod_name.startswith("tanglecode."):
+        del sys.modules[mod_name]
 
-try:
-    from tanglecode.braid import (
-        extract_braid_word,
-        extract_crossings_with_channels,
-        rank_vector,
-        reduce_with_channels,
-    )
-except ImportError:
-    import importlib
-    import tanglecode.braid
-    importlib.reload(tanglecode.braid)
-    from tanglecode.braid import (
-        extract_braid_word,
-        extract_crossings_with_channels,
-        rank_vector,
-        reduce_with_channels,
-    )
-
+from tanglecode.anomaly import (
+    BraidAnomalyDetector,
+    diagnose_window_fault,
+    learn_channel_baseline,
+)
+from tanglecode.braid import (
+    extract_braid_word,
+    extract_crossings_with_channels,
+    rank_vector,
+    reduce_with_channels,
+)
 from tanglecode.codec import MODE_RANK_ONLY, encode
 from tanglecode.data import generate_synthetic, inject_fault, load_csv
-
-try:
-    from tanglecode.reports import anomaly_report_csv, summary_json
-except ImportError:
-    import importlib
-    import tanglecode.reports
-    importlib.reload(tanglecode.reports)
-    from tanglecode.reports import anomaly_report_csv, summary_json
+from tanglecode.reports import anomaly_report_csv, summary_json
 
 # Page configuration
 st.set_page_config(
