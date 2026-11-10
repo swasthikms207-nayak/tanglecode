@@ -1,5 +1,11 @@
 """TangleCode: Braid representations and topological reductions for multichannel time series."""
 
+from tanglecode.anomaly import (
+    AnomalyRecord,
+    BraidAnomalyDetector,
+    compute_window_features,
+    detect_anomalies,
+)
 from tanglecode.braid import (
     ReductionResult,
     extract_braid_word,
@@ -32,4 +38,8 @@ __all__ = [
     "decode",
     "MODE_RANK_ONLY",
     "MODE_HYBRID",
+    "AnomalyRecord",
+    "BraidAnomalyDetector",
+    "compute_window_features",
+    "detect_anomalies",
 ]

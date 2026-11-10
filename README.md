@@ -22,6 +22,10 @@ TangleCode translates order changes across multichannel time-series signals into
   - 4-bit nibble packing for signed Artin generators (2 per byte, supporting $n \le 8$).
   - **Rank-only Mode** (lossy amplitude, exact rank order trajectory).
   - **Hybrid Mode** (int8 delta-modulated amplitudes with configurable step size).
+- **Streaming Anomaly Detection (`tanglecode.anomaly`)**:
+  - Sliding window topological analysis extracting reduced word lengths, compression ratios, and dominant generators.
+  - Baseline distribution learning with $k$-sigma thresholding.
+  - Streaming detection of sensor drift and frozen/stuck faults with low false-positive rates and prompt detection delay.
 
 ## Project Structure
 
@@ -29,18 +33,24 @@ TangleCode translates order changes across multichannel time-series signals into
 tanglecode/
 ├── tanglecode/
 │   ├── __init__.py
+│   ├── anomaly.py
 │   ├── braid.py
 │   ├── codec.py
-│   └── data.py
+│   ├── data.py
+│   └── benchmark.py
 ├── tests/
 │   ├── __init__.py
+│   ├── test_anomaly.py
+│   ├── test_benchmark.py
 │   ├── test_braid.py
 │   ├── test_codec.py
 │   └── test_data.py
 ├── data/
+│   ├── real.csv
 │   └── sample_signals.json
 ├── app.py
 ├── requirements.txt
+├── results.json
 ├── LICENSE
 └── README.md
 ```
