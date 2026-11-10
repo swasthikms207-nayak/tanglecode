@@ -5,7 +5,13 @@ from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
-from tanglecode.braid import extract_braid_word, rank_vector, reduce_word_full
+from tanglecode.braid import (
+    extract_braid_word,
+    extract_crossings_with_channels,
+    rank_vector,
+    reduce_with_channels,
+    reduce_word_full,
+)
 
 
 class AnomalyRecord(tuple):
@@ -274,3 +280,112 @@ def detect_anomalies(
         two_sided=two_sided,
     )
     return detector.predict(data)
+
+
+class ChannelFaultDiagnosis(NamedTuple):
+    """Diagnosis for a flagged anomaly window."""
+
+    window_start: int
+    most_likely_channel: int
+    top_crossing_pair: Optional[tuple[int, int]]
+    channel_z_scores: np.ndarray
+
+
+def count_surviving_crossings_per_channel(
+    window_data: np.ndarray,
+) -> tuple[np.ndarray, Optional[tuple[int, int]]]:
+    """Count how many surviving crossings involve each channel in a window, and find the top crossing pair.
+
+    Parameters
+    ----------
+    window_data : np.ndarray
+        Array of shape (window_size, n_channels).
+
+    Returns
+    -------
+    tuple[np.ndarray, Optional[tuple[int, int]]]
+        (channel_counts, top_crossing_pair)
+        channel_counts is a vector of length n_channels.
+        top_crossing_pair is (channel_a, channel_b) with channel_a < channel_b, or None if no crossings.
+    """
+    n_ticks = len(window_data)
+    n_channels = window_data.shape[1] if window_data.ndim == 2 else 0
+    if n_ticks <= 1 or n_channels == 0:
+        return np.zeros(n_channels, dtype=np.float32), None
+
+    ranks = [rank_vector(frame) for frame in window_data]
+    raw_crossings: list[tuple[int, int, int]] = []
+    for t in range(n_ticks - 1):
+        raw_crossings.extend(extract_crossings_with_channels(ranks[t], ranks[t + 1]))
+
+    reduced_crossings, _ = reduce_with_channels(raw_crossings)
+
+    counts = np.zeros(n_channels, dtype=np.float32)
+    pair_counts: Counter[tuple[int, int]] = Counter()
+
+    for g, a, b in reduced_crossings:
+        counts[a] += 1.0
+        counts[b] += 1.0
+        pair = (a, b) if a < b else (b, a)
+        pair_counts[pair] += 1
+
+    top_pair = pair_counts.most_common(1)[0][0] if pair_counts else None
+    return counts, top_pair
+
+
+def learn_channel_baseline(
+    data: np.ndarray,
+    window_size: int = 200,
+    n_baseline: int = 50,
+    step: int = 10,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Learn per-channel mean and std of surviving crossing counts from the first N clean windows."""
+    n_samples, n_channels = data.shape
+    baseline_counts: list[np.ndarray] = []
+
+    for i in range(n_baseline):
+        start = i * step
+        if start + window_size > n_samples:
+            break
+        w = data[start : start + window_size]
+        counts, _ = count_surviving_crossings_per_channel(w)
+        baseline_counts.append(counts)
+
+    if not baseline_counts:
+        return np.zeros(n_channels, dtype=np.float32), np.ones(n_channels, dtype=np.float32)
+
+    mat = np.array(baseline_counts)
+    mean = np.mean(mat, axis=0)
+    std = np.maximum(np.std(mat, axis=0), 1e-4)
+    return mean, std
+
+
+def diagnose_window_fault(
+    window_data: np.ndarray,
+    baseline_channel_mean: np.ndarray,
+    baseline_channel_std: np.ndarray,
+    window_start: int = 0,
+) -> ChannelFaultDiagnosis:
+    """Compute per-channel fault score for a window.
+
+    Computes per-channel z-score from surviving crossings, tuned to detect both
+    excess crossings (drift) and frozen/stuck sensors (near-zero signal variance),
+    and identifies the most likely faulty sensor and top crossing pair.
+    """
+    counts, top_pair = count_surviving_crossings_per_channel(window_data)
+    z_scores = np.abs(counts - baseline_channel_mean) / np.maximum(baseline_channel_std, 1e-4)
+
+    # Disambiguate stuck sensors: if a channel is frozen (variance near 0),
+    # boost its anomaly score so it is correctly prioritized over its crossing neighbors.
+    w_vars = np.var(window_data, axis=0)
+    boost = np.where(w_vars < 0.005, 10.0, 1.0)
+    effective_scores = z_scores * boost
+
+    most_likely_channel = int(np.argmax(effective_scores))
+    return ChannelFaultDiagnosis(
+        window_start=window_start,
+        most_likely_channel=most_likely_channel,
+        top_crossing_pair=top_pair,
+        channel_z_scores=effective_scores,
+    )
+

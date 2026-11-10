@@ -9,7 +9,8 @@ TangleCode translates multichannel sensor streams (such as IMUs, EEGs, and strai
 This yields:
 1. **Topological Noise Annihilation**: Eliminates up to 81% of spurious jitter crossings without heuristic amplitude filters.
 2. **Extreme Compression**: Over **93x compression ratio** compared to raw CSV by packing reduced braid generators into 4-bit nibbles.
-3. **Streaming Anomaly Detection**: Real-time identification of sensor drift and frozen/stuck failures with low latency and low false-positive rates.
+3. **Streaming Anomaly & Fault Localization**: Real-time identification of sensor drift and frozen/stuck failures, pinpointing the specific faulty channel and most frequent crossing partner.
+4. **Rich Multi-Format Exports**: One-click downloads for compressed `.tngl` binaries, diagnostic anomaly CSV reports, and comprehensive summary JSON benchmarks.
 
 ---
 
@@ -25,7 +26,7 @@ cd tanglecode
 pip install -r requirements.txt
 ```
 
-### 2. Launch the Streamlit Single-Page App
+### 2. Launch the Streamlit App
 
 ```bash
 streamlit run app.py
@@ -37,7 +38,7 @@ Open [http://localhost:8501](http://localhost:8501) in your browser.
 ### 3. Run Automated Tests & Benchmarks
 
 ```bash
-# Run pytest suite
+# Run complete test suite (33 tests)
 python -m pytest -v
 
 # Run compression benchmark
@@ -53,25 +54,39 @@ Present TangleCode in under 60 seconds:
 - **0:00 – 0:15 | The Core Idea**  
   > *"Multichannel sensor streams are flooded with high-frequency jitter. Instead of filtering noisy continuous amplitudes, TangleCode maps sensor rank permutations into the Artin Braid Group $B_n$. Transient jitter loops correspond mathematically to Reidemeister II crossing cancellations ($\sigma_i \sigma_i^{-1} \to 1$) that collapse to identity."*
 
-- **0:15 – 0:30 | Controls & Headline Metrics**  
-  > *"Notice the top controls: adjust the noise slider or upload any sensor CSV. Look at the headline metrics: out of 2,113 raw crossings, braid reduction eliminates over 81% of jitter crossings, yielding a **93x compression ratio** over raw CSV in our compact `.tngl` format."*
+- **0:15 – 0:30 | Page 1: Input & Analysis**  
+  > *"On Page 1, choose between uploading custom sensor CSVs or curated samples: 'Clean drone IMU', 'IMU with drifting sensor', or 'IMU with stuck sensor'. Click **'Analyze'** to stream through rank extraction, braid reduction, nibble packing, and per-channel fault scoring in real-time."*
 
-- **0:30 – 0:45 | Streaming Anomaly Detection**  
-  > *"Select **'Inject fault: drift'** or **'stuck'**. In the Plotly chart below, our streaming detector tracks irreducible braid-word length per window. The moment the fault begins, the topological weave deviates from the learned baseline, instantly highlighting the anomalous windows in red."*
+- **0:30 – 0:45 | Page 2: Metrics, Detection & Sensor Pinpointing**  
+  > *"On Page 2, view the 3 headline metric cards: 81% jitter eliminated, yielding a **93x compression ratio**. In the Plotly chart, anomaly windows are shaded red. Directly below, TangleCode pinpoints the exact faulty sensor: e.g. **'Most likely faulty sensor: Channel 4 (crossed most with Channel 3), around ticks 1440 to 1715'**."*
 
-- **0:45 – 1:00 | Binary Export & Edge Deployment**  
-  > *"Finally, click **'Download .tngl file'** to save the nibble-packed topological binary. TangleCode delivers ultra-lightweight sensor representations built for edge microcontrollers and real-time structural health monitoring."*
+- **0:45 – 1:00 | Sensor Pair Heatmap & Multi-Format Exports**  
+  > *"The interactive heatmap reveals surviving crossings by sensor pair across the entire stream. Finally, download the nibble-packed `.tngl` binary, the detailed **'Anomaly report (CSV)'**, and the comprehensive **'Summary (JSON)'** ready for edge deployment."*
 
 ---
 
-## Single-Page UI (`app.py`) Layout
+## Two-Page UI (`app.py`) Flow
 
-The web application is streamlined into a single focused page:
-1. **Explanation & Note**: Concept overview and the explicit rank-only monitoring role.
-2. **Controls**: Jitter noise level slider, "Inject fault" selector (`none`, `drift`, `stuck`), and CSV upload option.
-3. **Headline Metrics**: Live measured counts for **Raw Crossings**, **Reduced Crossings**, and **Compression Ratio**.
-4. **Topological Anomaly Detection Chart**: Interactive Plotly trajectory of irreducible reduced-word length across sliding windows with learned baseline $\mu \pm k\sigma$ threshold and flagged anomaly markers.
-5. **Binary Export**: Instant download button for the generated `.tngl` file.
+### Page 1: Input
+1. **Header & Description**: Concept summary.
+2. **Data Source Selector**:
+   - `Upload CSV`: File uploader detecting numeric sensor columns (requires $\ge 2$ channels).
+   - `Use a sample`: Select from `Clean drone IMU`, `IMU with drifting sensor`, and `IMU with stuck sensor`.
+3. **Analyze Button**: Runs the complete pipeline and transitions to Page 2.
+
+### Page 2: Results
+1. **Dataset Metadata**: Dataset name, channel count, and sample count.
+2. **Headline Metric Cards**: Live measured counts for **Raw Crossings**, **Reduced Crossings**, and **Compression Ratio**.
+3. **Topological Anomaly Detection Chart**: Plotly trajectory of irreducible reduced-word length across sliding windows with learned baseline $\mu \pm k\sigma$ threshold and red-shaded anomaly spans.
+4. **Fault Diagnosis Sentence**:
+   - If anomalies exist: `"Most likely faulty sensor: Channel X (crossed most with Channel Y), around ticks A to B."`
+   - If none: `"No faulty sensor identified."`
+5. **Sensor Pair Crossings Heatmap**: Interactive $n \times n$ Plotly heatmap showing surviving crossings between each sensor pair across the whole stream (blank diagonal).
+6. **Triple Export Buttons**:
+   - `Download .tngl file` (nibble-packed binary).
+   - `Anomaly report (CSV)` (window ticks, z-score, threshold, faulty channel, top pair).
+   - `Summary (JSON)` (dataset metrics, tick ranges, faulty channel).
+7. **Lossy-Mode Callout & Back Button**: Small note and a `"Back"` button to clear results and return to Page 1.
 
 ---
 

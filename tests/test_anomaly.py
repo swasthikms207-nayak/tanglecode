@@ -7,7 +7,10 @@ from tanglecode.anomaly import (
     AnomalyRecord,
     BraidAnomalyDetector,
     compute_window_features,
+    count_surviving_crossings_per_channel,
     detect_anomalies,
+    diagnose_window_fault,
+    learn_channel_baseline,
 )
 from tanglecode.data import generate_synthetic, inject_fault
 
@@ -145,3 +148,82 @@ def test_detect_anomalies_convenience_function():
         assert isinstance(start, int)
         assert isinstance(score, float)
         assert isinstance(flagged, bool)
+
+
+def test_per_channel_fault_scoring_identifies_known_channel(capsys):
+    """Verify that per-channel fault scoring correctly names channel 4 for both drift and stuck."""
+    from collections import Counter
+
+    known_channel = 4
+    n_channels = 6
+    clean_data = generate_synthetic(
+        n_channels=n_channels,
+        n_samples=3000,
+        noise_std=0.03,
+        seed=42,
+    )
+    fault_start = 1500
+    window_size = 200
+    n_baseline = 40
+    step = 10
+
+    # Learn baseline per-channel crossing counts from clean data
+    ch_mean, ch_std = learn_channel_baseline(
+        clean_data,
+        window_size=window_size,
+        n_baseline=n_baseline,
+        step=step,
+    )
+    assert len(ch_mean) == n_channels
+    assert len(ch_std) == n_channels
+
+    for kind in ["drift", "stuck"]:
+        slope = 0.015 if kind == "drift" else 0.005
+        faulty_data = inject_fault(
+            clean_data,
+            start=fault_start,
+            kind=kind,
+            channel=known_channel,
+            drift_slope=slope,
+        )
+
+        detector = BraidAnomalyDetector(
+            window_size=window_size,
+            n_baseline=n_baseline,
+            k=2.0,
+            step=step,
+            two_sided=True,
+        )
+        records = detector.predict(faulty_data)
+        flagged_records = [r for r in records if r.flagged and r.window_start >= fault_start]
+
+        assert len(flagged_records) > 0, f"No anomaly windows flagged for {kind}"
+
+        diagnoses = []
+        for r in flagged_records:
+            w = faulty_data[r.window_start : r.window_start + window_size]
+            diag = diagnose_window_fault(
+                w,
+                baseline_channel_mean=ch_mean,
+                baseline_channel_std=ch_std,
+                window_start=r.window_start,
+            )
+            diagnoses.append(diag)
+
+        # Count votes across all flagged windows
+        voted_channels = [d.most_likely_channel for d in diagnoses]
+        top_channel, vote_count = Counter(voted_channels).most_common(1)[0]
+
+        # Top crossing pair in the first flagged window
+        first_diag = diagnoses[0]
+        assert first_diag.top_crossing_pair is not None
+
+        print(f"\n[{kind.upper()}] Fault on Channel {known_channel}:")
+        print(f"  Flagged windows: {len(flagged_records)}")
+        print(f"  Named most likely faulty sensor: Channel {top_channel} ({vote_count}/{len(flagged_records)} votes)")
+        print(f"  First flagged window top crossing pair: {first_diag.top_crossing_pair}")
+
+        assert (
+            top_channel == known_channel
+        ), f"Expected channel {known_channel} for {kind}, got channel {top_channel}"
+

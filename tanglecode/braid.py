@@ -227,3 +227,72 @@ def reduce_word_full(word: Sequence[int]) -> ReductionResult:
             break
 
     return ReductionResult(curr, total_cancelled)
+
+
+def extract_crossings_with_channels(
+    prev_ranks: Sequence[int],
+    curr_ranks: Sequence[int],
+) -> list[tuple[int, int, int]]:
+    """Converts the change in ordering into signed Artin generators with channel pairs.
+
+    Same logic as extract_braid_word, but each crossing is returned as a tuple
+    (generator, channel_a, channel_b) where channel_a and channel_b are the two
+    sensor channel indices that swapped.
+    """
+    if len(prev_ranks) != len(curr_ranks):
+        raise ValueError("prev_ranks and curr_ranks must have equal length")
+
+    n = len(prev_ranks)
+    if n <= 1:
+        return []
+
+    target_pos = {strand: idx for idx, strand in enumerate(curr_ranks)}
+    arr = list(prev_ranks)
+    crossings: list[tuple[int, int, int]] = []
+
+    for pass_num in range(n - 1):
+        for j in range(n - 1 - pass_num):
+            if target_pos[arr[j]] > target_pos[arr[j + 1]]:
+                strand_up = arr[j]        # Moves from j to j+1 (UP in rank)
+                strand_down = arr[j + 1]  # Moves from j+1 to j (DOWN in rank)
+
+                # Deterministic rule: strand with smaller channel index crosses over
+                crosses_over = (strand_up < strand_down)
+                gen_idx = j + 1
+                generator = gen_idx if crosses_over else -gen_idx
+                crossings.append((generator, strand_up, strand_down))
+
+                # Execute swap
+                arr[j], arr[j + 1] = arr[j + 1], arr[j]
+
+    return crossings
+
+
+def reduce_with_channels(
+    crossings: Sequence[tuple[int, int, int]],
+) -> tuple[list[tuple[int, int, int]], int]:
+    """Stack-based cancellation preserving channel pairs for surviving crossings.
+
+    Cancellation happens when the top generator equals the negative of the
+    incoming generator (top[0] == -incoming[0]).
+
+    Returns
+    -------
+    tuple[list[tuple[int, int, int]], int]
+        (reduced_crossings, cancelled_pair_count).
+    """
+    stack: list[tuple[int, int, int]] = []
+    cancelled = 0
+
+    for item in crossings:
+        g = item[0]
+        if g == 0:
+            continue
+        if stack and stack[-1][0] == -g:
+            stack.pop()
+            cancelled += 1
+        else:
+            stack.append(item)
+
+    return stack, cancelled
+

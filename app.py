@@ -3,17 +3,28 @@
 import io
 import struct
 import tempfile
+from collections import Counter
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
-from tanglecode.anomaly import BraidAnomalyDetector
-from tanglecode.braid import extract_braid_word, rank_vector
+from tanglecode.anomaly import (
+    BraidAnomalyDetector,
+    diagnose_window_fault,
+    learn_channel_baseline,
+)
+from tanglecode.braid import (
+    extract_braid_word,
+    extract_crossings_with_channels,
+    rank_vector,
+    reduce_with_channels,
+)
 from tanglecode.codec import MODE_RANK_ONLY, encode
 from tanglecode.data import generate_synthetic, inject_fault, load_csv
+from tanglecode.reports import anomaly_report_csv, summary_json
 
 # Page configuration
 st.set_page_config(
@@ -123,9 +134,9 @@ if st.session_state["page"] == "input":
             if sample_choice == "Clean drone IMU":
                 data = clean_stream
             elif sample_choice == "IMU with drifting sensor":
-                data = inject_fault(clean_stream, start=1500, kind="drift", channel=0, drift_slope=0.015)
+                data = inject_fault(clean_stream, start=1500, kind="drift", channel=3, drift_slope=0.02)
             elif sample_choice == "IMU with stuck sensor":
-                data = inject_fault(clean_stream, start=1500, kind="stuck", channel=1)
+                data = inject_fault(clean_stream, start=1500, kind="stuck", channel=3)
 
         if data is not None:
             n_samples, n_channels = data.shape
@@ -145,22 +156,102 @@ if st.session_state["page"] == "input":
             csv_buf.write(",".join(f"Ch_{c}" for c in range(n_channels)) + "\n")
             for row in data:
                 csv_buf.write(",".join(f"{v:.6f}" for v in row) + "\n")
-            raw_csv_size = len(csv_buf.getvalue().encode("utf-8"))
+            raw_csv_str = csv_buf.getvalue()
+            raw_csv_bytes = raw_csv_str.encode("utf-8")
+            raw_csv_size = len(raw_csv_bytes)
             tngl_size = len(tngl_bytes)
             compression_ratio = raw_csv_size / tngl_size if tngl_size > 0 else 1.0
 
             # 4. Anomaly detection via sliding window braid reductions
             window_size = min(200, max(20, n_samples // 6))
             step = max(5, window_size // 15)
-            n_baseline = min(35, max(5, (n_samples // 2 - window_size) // step))
+            n_baseline = min(40, max(5, (n_samples // 2 - window_size) // step))
 
             detector = BraidAnomalyDetector(
                 window_size=window_size,
                 n_baseline=n_baseline,
-                k=2.5,
+                k=3.5,
                 step=step,
+                two_sided=True,
             )
             records = detector.predict(data)
+            flagged_records = [r for r in records if r.flagged]
+
+            # 5. Per-channel fault diagnosis
+            ch_mean, ch_std = learn_channel_baseline(
+                data,
+                window_size=window_size,
+                n_baseline=n_baseline,
+                step=step,
+            )
+
+            threshold_val = float(
+                detector.baseline_mean + detector.k * detector.baseline_std
+                if detector.baseline_mean is not None and detector.baseline_std is not None
+                else 0.0
+            )
+
+            flagged_diagnoses: List[Dict[str, Any]] = []
+            for r in flagged_records:
+                w = data[r.window_start : r.window_start + window_size]
+                diag = diagnose_window_fault(
+                    w,
+                    baseline_channel_mean=ch_mean,
+                    baseline_channel_std=ch_std,
+                    window_start=r.window_start,
+                )
+                flagged_diagnoses.append({
+                    "window_start_tick": r.window_start,
+                    "window_end_tick": r.window_start + window_size,
+                    "score": float(r.score),
+                    "threshold": threshold_val,
+                    "most_likely_channel": diag.most_likely_channel,
+                    "top_crossing_pair": diag.top_crossing_pair,
+                })
+
+            # Identify overall most likely faulty sensor across flagged windows
+            if flagged_diagnoses:
+                faulty_channel = Counter(
+                    [d["most_likely_channel"] for d in flagged_diagnoses]
+                ).most_common(1)[0][0]
+
+                # Identify the partner channel that crossed most with the faulty sensor
+                partner_counts: Counter[int] = Counter()
+                for d in flagged_diagnoses:
+                    pair = d["top_crossing_pair"]
+                    if pair is not None and faulty_channel in pair:
+                        other = pair[0] if pair[1] == faulty_channel else pair[1]
+                        partner_counts[other] += 1
+                crossed_with_channel = (
+                    partner_counts.most_common(1)[0][0]
+                    if partner_counts
+                    else ((faulty_channel + 1) % n_channels)
+                )
+
+                anomaly_tick_start = min(d["window_start_tick"] for d in flagged_diagnoses)
+                anomaly_tick_end = max(d["window_end_tick"] for d in flagged_diagnoses)
+            else:
+                faulty_channel = None
+                crossed_with_channel = None
+                anomaly_tick_start = None
+                anomaly_tick_end = None
+
+            # 6. Surviving crossings by sensor pair across the whole dataset
+            whole_raw_crossings: list[tuple[int, int, int]] = []
+            for t in range(n_samples - 1):
+                whole_raw_crossings.extend(
+                    extract_crossings_with_channels(rank_vector(data[t]), rank_vector(data[t + 1]))
+                )
+            whole_reduced_crossings, _ = reduce_with_channels(whole_raw_crossings)
+
+            crossing_matrix = np.zeros((n_channels, n_channels), dtype=np.float64)
+            for _, a, b in whole_reduced_crossings:
+                crossing_matrix[a, b] += 1
+                crossing_matrix[b, a] += 1
+
+            # Blank diagonal
+            for i in range(n_channels):
+                crossing_matrix[i, i] = np.nan
 
             # Store results in session_state and transition to Page 2
             st.session_state["results"] = {
@@ -170,6 +261,7 @@ if st.session_state["page"] == "input":
                 "raw_crossings": total_raw_crossings,
                 "reduced_crossings": total_reduced_crossings,
                 "raw_csv_size": raw_csv_size,
+                "raw_csv_bytes": raw_csv_bytes,
                 "tngl_size": tngl_size,
                 "compression_ratio": compression_ratio,
                 "tngl_bytes": tngl_bytes,
@@ -179,6 +271,12 @@ if st.session_state["page"] == "input":
                 "baseline_std": detector.baseline_std,
                 "k": detector.k,
                 "records": records,
+                "flagged_diagnoses": flagged_diagnoses,
+                "faulty_channel": faulty_channel,
+                "crossed_with_channel": crossed_with_channel,
+                "anomaly_tick_start": anomaly_tick_start,
+                "anomaly_tick_end": anomaly_tick_end,
+                "crossing_matrix": crossing_matrix,
             }
             st.session_state["page"] = "results"
             st.rerun()
@@ -296,20 +394,102 @@ elif st.session_state["page"] == "results":
         caption_text = "Anomalies detected: None. Sensor signals remained within normal baseline boundaries."
     st.caption(caption_text)
 
+    # Plain sentence stating most likely faulty sensor
+    flagged_diagnoses = res.get("flagged_diagnoses", [])
+    if flagged_diagnoses and res.get("faulty_channel") is not None:
+        faulty_label = f"Channel {res['faulty_channel'] + 1}"
+        other_label = (
+            f"Channel {res['crossed_with_channel'] + 1}"
+            if res.get("crossed_with_channel") is not None
+            else "neighbor"
+        )
+        t_a = res.get("anomaly_tick_start", 0)
+        t_b = res.get("anomaly_tick_end", 0)
+        st.write(
+            f"Most likely faulty sensor: {faulty_label} (crossed most with {other_label}), "
+            f"around ticks {t_a} to {t_b}."
+        )
+    else:
+        st.write("No faulty sensor identified.")
+
     st.write("")
 
-    # Download button for the .tngl file
-    download_filename = (
-        Path(res["dataset_name"]).stem + ".tngl"
+    # Plotly Heatmap: Surviving crossings by sensor pair across the whole dataset
+    n_ch = res["n_channels"]
+    channel_labels = [f"Channel {i + 1}" for i in range(n_ch)]
+    fig_heat = go.Figure(
+        data=go.Heatmap(
+            z=res["crossing_matrix"],
+            x=channel_labels,
+            y=channel_labels,
+            colorscale="Blues",
+            hoverongaps=False,
+            colorbar=dict(title="Crossings"),
+        )
+    )
+    fig_heat.update_layout(
+        title="Surviving crossings by sensor pair",
+        template="plotly_white",
+        height=400,
+        margin=dict(l=40, r=40, t=50, b=40),
+    )
+    st.plotly_chart(fig_heat, use_container_width=True)
+
+    st.write("")
+
+    # Export utilities for the 3 download buttons
+    base_name = (
+        Path(res["dataset_name"]).stem
         if res["dataset_name"].endswith(".csv")
-        else "sensor_data.tngl"
+        else res["dataset_name"].lower().replace(" ", "_")
     )
-    st.download_button(
-        label="Download .tngl file",
-        data=res["tngl_bytes"],
-        file_name=download_filename,
-        mime="application/octet-stream",
-    )
+    tngl_filename = f"{base_name}.tngl"
+    report_csv_filename = f"{base_name}_anomaly_report.csv"
+    summary_json_filename = f"{base_name}_summary.json"
+
+    report_results_payload = {
+        "dataset_name": res["dataset_name"],
+        "n_channels": res["n_channels"],
+        "n_samples": res["n_samples"],
+        "raw_crossings": res["raw_crossings"],
+        "reduced_crossings": res["reduced_crossings"],
+        "raw_csv_size": res["raw_csv_size"],
+        "raw_csv_bytes": res.get("raw_csv_bytes", None),
+        "tngl_size": res["tngl_size"],
+        "flagged_diagnoses": flagged_diagnoses,
+        "flagged_intervals": flagged_intervals,
+        "faulty_channel": res.get("faulty_channel", None),
+    }
+
+    report_csv_text = anomaly_report_csv(report_results_payload)
+    summary_json_text = summary_json(report_results_payload)
+
+    # Three download buttons in columns
+    btn_col1, btn_col2, btn_col3 = st.columns(3)
+
+    with btn_col1:
+        st.download_button(
+            label="Download .tngl file",
+            data=res["tngl_bytes"],
+            file_name=tngl_filename,
+            mime="application/octet-stream",
+        )
+
+    with btn_col2:
+        st.download_button(
+            label="Anomaly report (CSV)",
+            data=report_csv_text,
+            file_name=report_csv_filename,
+            mime="text/csv",
+        )
+
+    with btn_col3:
+        st.download_button(
+            label="Summary (JSON)",
+            data=summary_json_text,
+            file_name=summary_json_filename,
+            mime="application/json",
+        )
 
     # Small note
     st.caption(

@@ -4,7 +4,9 @@ import pytest
 from tanglecode.braid import (
     ReductionResult,
     extract_braid_word,
+    extract_crossings_with_channels,
     rank_vector,
+    reduce_with_channels,
     reduce_word,
     reduce_word_full,
 )
@@ -227,4 +229,41 @@ def test_large_permutation_reversal():
     reduced_full, count_full = reduce_word_full(round_trip)
     assert reduced_full == []
     assert count_full == 6
+
+
+def test_channel_aware_crossings_match_reduce_word():
+    """Verify that extract_crossings_with_channels and reduce_with_channels
+    generators match reduce_word for identical inputs.
+    """
+    prev = [0, 1, 2, 3, 4]
+    curr = [2, 0, 3, 1, 4]
+
+    # Raw generation
+    word = extract_braid_word(prev, curr)
+    crossings = extract_crossings_with_channels(prev, curr)
+
+    assert len(word) == len(crossings)
+    assert [c[0] for c in crossings] == word
+
+    # Each crossing has valid channel indices in range
+    for g, ch_a, ch_b in crossings:
+        assert 0 <= ch_a < 5
+        assert 0 <= ch_b < 5
+        assert ch_a != ch_b
+
+    # Add jitter return loop to test reduction
+    curr2 = [0, 2, 3, 1, 4]
+    word2 = extract_braid_word(curr, curr2)
+    crossings2 = extract_crossings_with_channels(curr, curr2)
+
+    total_word = word + word2
+    total_crossings = crossings + crossings2
+
+    reduced_word, cancelled_word = reduce_word(total_word)
+    reduced_crossings, cancelled_crossings = reduce_with_channels(total_crossings)
+
+    # Generators in reduced crossings must match reduce_word exactly
+    assert [c[0] for c in reduced_crossings] == list(reduced_word)
+    assert cancelled_crossings == cancelled_word
+
 
