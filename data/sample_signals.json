@@ -1,0 +1,12 @@
+{
+  "description": "Synthetic 4-channel time series containing both transient jitter and persistent crossings.",
+  "channels": ["Ch0", "Ch1", "Ch2", "Ch3"],
+  "frames": [
+    [1.0, 2.0, 3.0, 4.0],
+    [2.2, 2.0, 3.0, 4.0],
+    [1.0, 2.0, 3.0, 4.0],
+    [1.0, 2.0, 4.5, 4.0],
+    [3.5, 2.0, 4.5, 4.0],
+    [3.5, 2.0, 4.5, 5.0]
+  ]
+}
