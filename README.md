@@ -12,6 +12,16 @@ TangleCode translates order changes across multichannel time-series signals into
 - **`reduce_word_full(word)`**: Full topological reduction applying:
   - Far-commutativity ($\sigma_i \sigma_j = \sigma_j \sigma_i$ for $|i - j| \ge 2$) via canonical sorting of commuting neighbors.
   - Braid relation ($\sigma_i \sigma_{i+1} \sigma_i \leftrightarrow \sigma_{i+1} \sigma_i \sigma_{i+1}$) applied whenever it unlocks further reductions.
+- **`generate_synthetic(...)`**: Generates multi-channel simulated IMU signals (sinusoids with channel frequencies + Gaussian noise).
+- **`inject_fault(...)`**: Injects sensor faults (`"drift"` or `"stuck"`) into designated channels.
+- **`load_csv(...)`**: Ingests sensor data from CSV files, automatically isolating numeric sensor channels.
+- **`.tngl` Binary Codec (`encode` / `decode`)**:
+  - Compact 14-byte header (`magic="TNGL"`, $n$, raw generator count, reduced generator count, mode).
+  - First frame anchor snapshot as float32 per channel.
+  - Run-length encoded per-tick generator counts preserving timing.
+  - 4-bit nibble packing for signed Artin generators (2 per byte, supporting $n \le 8$).
+  - **Rank-only Mode** (lossy amplitude, exact rank order trajectory).
+  - **Hybrid Mode** (int8 delta-modulated amplitudes with configurable step size).
 
 ## Project Structure
 
@@ -19,10 +29,14 @@ TangleCode translates order changes across multichannel time-series signals into
 tanglecode/
 ├── tanglecode/
 │   ├── __init__.py
-│   └── braid.py
+│   ├── braid.py
+│   ├── codec.py
+│   └── data.py
 ├── tests/
 │   ├── __init__.py
-│   └── test_braid.py
+│   ├── test_braid.py
+│   ├── test_codec.py
+│   └── test_data.py
 ├── data/
 │   └── sample_signals.json
 ├── app.py

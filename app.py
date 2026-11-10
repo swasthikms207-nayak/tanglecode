@@ -7,12 +7,21 @@ and topological Reidemeister reductions on multichannel signals.
 import json
 from pathlib import Path
 
+import numpy as np
+
 from tanglecode.braid import (
     extract_braid_word,
     rank_vector,
     reduce_word,
     reduce_word_full,
 )
+from tanglecode.codec import (
+    MODE_HYBRID,
+    MODE_RANK_ONLY,
+    decode,
+    encode,
+)
+from tanglecode.data import generate_synthetic, inject_fault
 
 
 def run_pipeline(frames: list[list[float]], channel_names: list[str] | None = None) -> dict:
@@ -50,9 +59,9 @@ def run_pipeline(frames: list[list[float]], channel_names: list[str] | None = No
 
 
 def main():
-    print("=" * 60)
-    print("  TANGLECODE: Multichannel Braid Word Topological Reduction")
-    print("=" * 60)
+    print("=" * 65)
+    print("  TANGLECODE: Multichannel Braid Word Topological Reduction & Codec")
+    print("=" * 65)
 
     data_path = Path(__file__).parent / "data" / "sample_signals.json"
     if data_path.exists():
@@ -66,10 +75,10 @@ def main():
         channels = ["A", "B", "C", "D"]
         frames = [
             [1.0, 2.0, 3.0, 4.0],
-            [2.5, 2.0, 3.0, 4.0],  # A overtakes B (jitter overtake)
-            [1.0, 2.0, 3.0, 4.0],  # A returns below B (jitter loop)
-            [1.0, 2.0, 4.5, 4.0],  # C overtakes D (persistent crossing)
-            [3.2, 2.0, 4.5, 4.0],  # A overtakes B permanently
+            [2.5, 2.0, 3.0, 4.0],
+            [1.0, 2.0, 3.0, 4.0],
+            [1.0, 2.0, 4.5, 4.0],
+            [3.2, 2.0, 4.5, 4.0],
         ]
 
     results = run_pipeline(frames, channels)
@@ -77,21 +86,42 @@ def main():
     print(f"\nChannels: {results['channel_names']}")
     print(f"Number of frames: {len(frames)}")
 
-    print("\nRank vectors per frame:")
-    for idx, rv in enumerate(results["rank_vectors"]):
-        print(f"  Frame {idx:02d}: {rv} (values: {frames[idx]})")
-
-    print("\nGenerators extracted per transition:")
-    for t, step_w in enumerate(results["step_words"]):
-        print(f"  Frame {t} -> {t+1}: {step_w}")
-
     print("\n--- Word Reduction Results ---")
     print(f"Raw Braid Word:             {results['raw_word']} (len: {len(results['raw_word'])})")
     print(f"Single-pass Reduced Word:   {results['single_pass_word']} (len: {len(results['single_pass_word'])})")
     print(f"  Cancelled pairs (Reidemeister II): {results['single_pass_cancelled']}")
     print(f"Fully Reduced Word (Full):  {results['full_word']} (len: {len(results['full_word'])})")
     print(f"  Total cancellations:               {results['full_cancelled']}")
-    print("=" * 60)
+
+    # Demonstrate synthetic data generation, fault injection, and .tngl codec
+    print("\n" + "=" * 65)
+    print("  DEMO: Synthetic IMU Data, Fault Injection & .tngl Codec")
+    print("=" * 65)
+
+    sim_data = generate_synthetic(n_channels=6, n_samples=500, noise_std=0.03, seed=42)
+    print(f"Generated synthetic IMU data: shape {sim_data.shape} ({sim_data.nbytes} bytes raw float32)")
+
+    # Inject sensor drift fault at sample 250 on Channel 0
+    faulty_data = inject_fault(sim_data, start=250, kind="drift", channel=0, drift_slope=0.01)
+    print("Injected 'drift' fault on Channel 0 starting at sample 250.")
+
+    # Encode in Rank-only mode
+    tngl_rank = encode(faulty_data, mode=MODE_RANK_ONLY)
+    recon_rank = decode(tngl_rank)
+    print(f"\n[Rank-Only Mode]")
+    print(f"  Compressed size:   {len(tngl_rank)} bytes")
+    print(f"  Compression ratio: {sim_data.nbytes / len(tngl_rank):.1f}x")
+    print(f"  Reconstructed shape: {recon_rank.shape}")
+
+    # Encode in Hybrid mode
+    tngl_hybrid = encode(faulty_data, mode=MODE_HYBRID, step_size=0.02)
+    recon_hybrid = decode(tngl_hybrid)
+    max_err = float(np.max(np.abs(recon_hybrid - faulty_data)))
+    print(f"\n[Hybrid Mode]")
+    print(f"  Compressed size:   {len(tngl_hybrid)} bytes")
+    print(f"  Compression ratio: {sim_data.nbytes / len(tngl_hybrid):.1f}x")
+    print(f"  Max reconstruction error: {max_err:.5f}")
+    print("=" * 65)
 
 
 if __name__ == "__main__":
