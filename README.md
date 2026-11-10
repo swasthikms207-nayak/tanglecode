@@ -1,13 +1,15 @@
 # TangleCode 🧬
 
-**Topological Braid Group Sensor Encoding, Ultra-High Compression & Streaming Fault Detection**
+**Topological Braid Group Sensor Encoding, Lossless-Rank Compression & Streaming Fault Detection**
 
 TangleCode translates multichannel sensor streams (such as IMUs, EEGs, and strain gauges) into signed generators of the **Artin Braid Group $B_n$**. Transient noise loops correspond directly to **Reidemeister II crossing annihilations** ($\sigma_i \sigma_i^{-1} \to 1$), while true structural crossings and sensor faults remain invariant.
 
+> **Note:** Rank-only mode keeps sensor ordering and discards exact amplitudes. It is built for structure and fault monitoring, not full recovery.
+
 This yields:
-1. **Topological Noise Rejection**: Up to 81% of spurious jitter crossings are annihilated without heuristic amplitude thresholds.
-2. **Extreme Compression**: Up to **93x compression ratio** in Rank-Only mode, and **8.7x in Hybrid mode** with continuous amplitude recovery (RMSE < 0.006).
-3. **Streaming Anomaly Detection**: Real-time detection of sensor drift and frozen/stuck failures with prompt detection delay (< 60 ticks) and low false-positive rates (< 1.5%).
+1. **Topological Noise Annihilation**: Eliminates up to 81% of spurious jitter crossings without heuristic amplitude filters.
+2. **Extreme Compression**: Over **93x compression ratio** compared to raw CSV by packing reduced braid generators into 4-bit nibbles.
+3. **Streaming Anomaly Detection**: Real-time identification of sensor drift and frozen/stuck failures with low latency and low false-positive rates.
 
 ---
 
@@ -23,7 +25,7 @@ cd tanglecode
 pip install -r requirements.txt
 ```
 
-### 2. Launch the Streamlit Hackathon Demo
+### 2. Launch the Streamlit Single-Page App
 
 ```bash
 streamlit run app.py
@@ -35,61 +37,41 @@ Open [http://localhost:8501](http://localhost:8501) in your browser.
 ### 3. Run Automated Tests & Benchmarks
 
 ```bash
-# Run complete test suite (29 tests)
-pytest -v
+# Run pytest suite
+python -m pytest -v
 
-# Run compression & fidelity benchmarks
+# Run compression benchmark
 python -m tanglecode.benchmark
 ```
 
 ---
 
-## ⏱️ 60-Second Hackathon Demo Script
+## ⏱️ 60-Second Demo Script
 
-Here is an effective script to present TangleCode to judges or audiences in 60 seconds:
+Present TangleCode in under 60 seconds:
 
-- **0:00 – 0:15 | The Problem & The Core Idea**  
-  > *"Every edge device from drones to wearables is flooded with noisy multichannel sensor streams. Filtering in the continuous amplitude domain introduces lag and drift. Instead, TangleCode projects channel dynamics into algebraic topology — specifically the Artin Braid Group $B_n$. Transient jitter loops correspond mathematically to Reidemeister II crossing annihilations ($\sigma_i \sigma_i^{-1} \to 1$). When we simplify the braid, the noise cancels itself out!"*
+- **0:00 – 0:15 | The Core Idea**  
+  > *"Multichannel sensor streams are flooded with high-frequency jitter. Instead of filtering noisy continuous amplitudes, TangleCode maps sensor rank permutations into the Artin Braid Group $B_n$. Transient jitter loops correspond mathematically to Reidemeister II crossing cancellations ($\sigma_i \sigma_i^{-1} \to 1$) that collapse to identity."*
 
-- **0:15 – 0:30 | Tab 1: Live Braid & Reidemeister Jitter Annihilation**  
-  > *"Look at Tab 1. Here are 8 sensor channels weaving over time. Notice the crossings marked along the strands. As we increase the jitter slider, dozens of spurious noise crossings appear. Now watch what happens when we toggle **'Apply Reidemeister reduction'**: instantly, the transient noise loops vanish! Over 80% of crossings collapse, leaving only the true topological weave."*
+- **0:15 – 0:30 | Controls & Headline Metrics**  
+  > *"Notice the top controls: adjust the noise slider or upload any sensor CSV. Look at the headline metrics: out of 2,113 raw crossings, braid reduction eliminates over 81% of jitter crossings, yielding a **93x compression ratio** over raw CSV in our compact `.tngl` format."*
 
-- **0:30 – 0:45 | Tab 2: 93x Compression & Tab 3: Streaming Fault Detection**  
-  > *"In Tab 2, our `.tngl` binary format packs reduced generators into 4-bit nibbles, achieving **93x compression** over raw CSV in Rank-Only mode, and **8.7x in Hybrid mode** with an RMSE under 0.006 (beating gzip and zstandard by 3.5x). In Tab 3, watch our streaming anomaly detector: click **'Inject Fault'** to simulate sensor drift or a frozen channel. Within 60 ticks, the reduced braid length breaks the baseline threshold, flagging the anomaly with less than 1.5% false positives."*
+- **0:30 – 0:45 | Streaming Anomaly Detection**  
+  > *"Select **'Inject fault: drift'** or **'stuck'**. In the Plotly chart below, our streaming detector tracks irreducible braid-word length per window. The moment the fault begins, the topological weave deviates from the learned baseline, instantly highlighting the anomalous windows in red."*
 
-- **0:45 – 1:00 | Tab 4: Upload Custom Data & Export .tngl Binaries**  
-  > *"Finally, in Tab 4, upload any real sensor CSV. TangleCode automatically parses numeric channels, computes braid word reductions, and gives you a one-click download of the compressed `.tngl` binary. TangleCode turns noisy multichannel data into compact topological invariants ready for edge microcontrollers."*
+- **0:45 – 1:00 | Binary Export & Edge Deployment**  
+  > *"Finally, click **'Download .tngl file'** to save the nibble-packed topological binary. TangleCode delivers ultra-lightweight sensor representations built for edge microcontrollers and real-time structural health monitoring."*
 
 ---
 
-## Interactive Streamlit Demo Overview
+## Single-Page UI (`app.py`) Layout
 
-The demo app ([`app.py`](app.py)) starts from the **Dataset & Upload** page and seamlessly powers the remaining analysis tabs with the chosen dataset:
-
-### 1. 📁 Dataset & Upload (Landing Page)
-- **Data Source Selection**:
-  - Upload custom CSV files (auto-isolates numeric sensor channels).
-  - Or choose from curated sample datasets:
-    - `Real 6-Axis Motion Sensor (data/real.csv)`
-    - `Synthetic 8-Channel IMU Stream`
-    - `Synthetic 4-Channel Correlated Stream`
-- **Signal Preview & Dimensions**: Immediate waveform visualization and channel overview.
-- **Binary Export**: Instant download buttons for `.tngl` binary packages (Rank-Only and Hybrid modes).
-
-### 2. 🧬 Live Braid
-- **Active Dataset Weaving**: Visualizes the strands of the loaded dataset.
-- **Window Controls**: Sliders for window length, start offset, and optional added jitter.
-- **Reidemeister Toggle**: Live Reidemeister II reduction toggle with real-time metrics showing Raw Crossings, Reduced Crossings, and Annihilated Jitter.
-
-### 3. 📊 Compression Benchmark
-- **Benchmarking on Active Data**: Live measurement comparing Raw CSV, gzip, zstandard, Hysteresis, TangleCode Rank-Only, and TangleCode Hybrid.
-- **Interactive Plotly Visualizations**: Log-scale compressed size and compression ratio comparisons.
-- **Fidelity Metrics**: Kendall's rank correlation $\tau$ and amplitude RMSE.
-
-### 4. 🚨 Fault Detection
-- **Fault Injection on Active Data**: Inject linear sensor drift or stuck/frozen channels directly into any selected channel of the loaded dataset.
-- **Streaming Sliding Window Analysis**: Real-time trajectory of reduced word length per window with baseline $\pm k\sigma$ confidence bands and highlighted anomaly diamonds.
-- **Performance Metrics**: False positive rate (FPR) and detection delay reported live.
+The web application is streamlined into a single focused page:
+1. **Explanation & Note**: Concept overview and the explicit rank-only monitoring role.
+2. **Controls**: Jitter noise level slider, "Inject fault" selector (`none`, `drift`, `stuck`), and CSV upload option.
+3. **Headline Metrics**: Live measured counts for **Raw Crossings**, **Reduced Crossings**, and **Compression Ratio**.
+4. **Topological Anomaly Detection Chart**: Interactive Plotly trajectory of irreducible reduced-word length across sliding windows with learned baseline $\mu \pm k\sigma$ threshold and flagged anomaly markers.
+5. **Binary Export**: Instant download button for the generated `.tngl` file.
 
 ---
 
@@ -97,26 +79,40 @@ The demo app ([`app.py`](app.py)) starts from the **Dataset & Upload** page and 
 
 | Section | Size | Description |
 | :--- | :---: | :--- |
-| **Header** | 14 bytes | Magic `b"TNGL"` (4B), $n$ channels (uint8, $n \le 8$), raw generator count (uint32), reduced generator count (uint32), mode byte (uint8: 0=rank-only, 1=hybrid). |
-| **Anchor Snapshot** | $4n$ bytes | First frame stored as $n \times \text{float32}$ continuous amplitudes. |
-| **Timing (RLE)** | Variable | Run-length encoded per-tick generator counts preserving timing. |
-| **Payload** | $\lceil M/2 \rceil$ bytes | Reduced generators packed 2-per-byte as 4-bit nibbles (bit 3: sign, bits 0-2: generator index). |
-| **Hybrid Section** | $4 + (T-1)n$ bytes | *(Mode 1 only)* float32 delta step size followed by int8 closed-loop delta modulation bytes. |
+| **Header** | 14 bytes | Magic `b"TNGL"` (4B), $n$ channels (uint8, $n \le 8$), raw generator count (uint32), reduced generator count (uint32), mode byte (uint8: `0 = MODE_RANK_ONLY`). |
+| **Anchor Snapshot** | $4n$ bytes | First frame stored as $n \times \text{float32}$ continuous values. |
+| **Timing (RLE)** | Variable | Run-length encoded per-tick generator counts preserving sample timing. |
+| **Payload** | $\lceil M/2 \rceil$ bytes | Reduced generators packed 2-per-byte as 4-bit nibbles (bit 3: sign, bits 0-2: index). |
 
 ---
 
-## Benchmark Results Summary
+## Benchmark Results
 
-Measured on synthetic IMU signals ($8$ channels, $5,000$ samples, $2,113$ raw crossings) and real gait IMU data ($6$ channels, $500$ samples, $382$ raw crossings):
+Measured with `python -m tanglecode.benchmark` on synthetic IMU data (8 channels, 5,000 samples) and real gait IMU data (`data/real.csv`, 6 channels, 500 samples):
 
-| Method | Synthetic Size | Synthetic Ratio | Crossings Eliminated | Kendall $\tau$ | RMSE |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Raw CSV** | 382,564 B | 1.00x | 0.0% | 1.0000 | 0.0000 |
-| **gzip (CSV)** | 163,960 B | 2.33x | 0.0% | 1.0000 | 0.0000 |
-| **zstandard (float32)** | 147,949 B | 2.59x | 0.0% | 1.0000 | 0.0000 |
-| **Hysteresis Baseline** | 7,568 B | 50.55x | 57.3% | 0.9851 | N/A |
-| **TangleCode Rank-Only** | **4,111 B** | **93.06x** | **81.2%** | 0.9194 | N/A |
-| **TangleCode Hybrid** | 44,107 B | 8.67x | 81.2% | **0.9976** | **0.0058** |
+```
+======================================================================
+  BENCHMARK: Synthetic IMU (8 ch, 5000 samples)
+======================================================================
+Method                 |   Size (B) |    Ratio | Raw -> Reduced Crossings
+----------------------------------------------------------------------
+Raw CSV                |    382,564 |    1.00x |             2113 -> 2113
+gzip (CSV)             |    163,960 |    2.33x |             2113 -> 2113
+Hysteresis Baseline    |      7,568 |   50.55x |              2113 -> 903
+TangleCode Rank-Only   |      4,111 |   93.06x |              2113 -> 397
+======================================================================
+
+======================================================================
+  BENCHMARK: Real CSV: real.csv
+======================================================================
+Method                 |   Size (B) |    Ratio | Raw -> Reduced Crossings
+----------------------------------------------------------------------
+Raw CSV                |     28,516 |    1.00x |               382 -> 382
+gzip (CSV)             |     10,570 |    2.70x |               382 -> 382
+Hysteresis Baseline    |      1,515 |   18.82x |               382 -> 166
+TangleCode Rank-Only   |      1,493 |   19.10x |               382 -> 182
+======================================================================
+```
 
 ---
 

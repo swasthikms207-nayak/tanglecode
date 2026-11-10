@@ -1,4 +1,4 @@
-"""Codec for the .tngl binary format: topological braid compression of multichannel time series."""
+"""Rank-only codec for the .tngl binary format: topological braid compression."""
 
 import struct
 from typing import Sequence, Union
@@ -7,13 +7,10 @@ import numpy as np
 
 from tanglecode.braid import extract_braid_word, rank_vector
 
-# Magic bytes identifying the TNGL format
 MAGIC = b"TNGL"
 HEADER_STRUCT = "<4sBIIB"
 HEADER_SIZE = struct.calcsize(HEADER_STRUCT)  # 14 bytes
-
 MODE_RANK_ONLY = 0
-MODE_HYBRID = 1
 
 
 def _pack_nibble(g: int) -> int:
@@ -61,13 +58,7 @@ def _unpack_generators(payload: bytes, count: int) -> list[int]:
 
 
 def _rle_encode(counts: Sequence[int]) -> bytes:
-    """Run-length encode a sequence of per-tick generator counts.
-
-    Format:
-    num_ticks: uint32
-    num_runs: uint32
-    runs: num_runs * (count: uint16, run_length: uint32)
-    """
+    """Run-length encode per-tick generator counts."""
     num_ticks = len(counts)
     if num_ticks == 0:
         return struct.pack("<II", 0, 0)
@@ -93,10 +84,7 @@ def _rle_encode(counts: Sequence[int]) -> bytes:
 
 
 def _rle_decode(data: bytes, offset: int) -> tuple[list[int], int]:
-    """Decode run-length encoded per-tick counts.
-
-    Returns (counts, new_offset).
-    """
+    """Decode run-length encoded per-tick counts."""
     num_ticks, num_runs = struct.unpack_from("<II", data, offset)
     offset += 8
 
@@ -116,24 +104,18 @@ def _reduce_tagged_generators(
     raw_gens: Sequence[int],
     raw_ticks: Sequence[int],
 ) -> list[tuple[int, int]]:
-    """Reduce generators across ticks with commutativity-aware stack cancellation.
-
-    Tracks which tick each surviving generator belongs to so timing can be restored.
-    """
+    """Reduce generators across ticks with commutativity-aware stack cancellation."""
     stack: list[tuple[int, int]] = []
 
     for g, t in zip(raw_gens, raw_ticks):
-        # Look backwards in stack for a commuting inverse to cancel with
         cancelled = False
         for i in range(len(stack) - 1, -1, -1):
             prev_g, prev_t = stack[i]
             if prev_g == -g:
-                # Direct cancellation via commutativity
                 stack.pop(i)
                 cancelled = True
                 break
             elif abs(abs(g) - abs(prev_g)) < 2:
-                # Does not commute with intervening generator; cannot pass through
                 break
 
         if not cancelled:
@@ -144,10 +126,9 @@ def _reduce_tagged_generators(
 
 def encode(
     data: Union[np.ndarray, Sequence[Sequence[float]]],
-    mode: Union[int, str] = MODE_RANK_ONLY,
-    step_size: float = 0.05,
+    mode: int = MODE_RANK_ONLY,
 ) -> bytes:
-    """Encode multichannel time series data into the .tngl binary format.
+    """Encode multichannel time series data into rank-only .tngl binary format.
 
     Format:
     - Header (14 bytes): magic "TNGL", n (uint8), raw_generator_count (uint32),
@@ -155,17 +136,13 @@ def encode(
     - Anchor snapshot: first frame as float32 per channel.
     - Timing: RLE encoded per-tick generator counts.
     - Payload: reduced generators packed 2-per-byte as 4-bit nibbles.
-    - Hybrid section (if mode == 1): float32 step_size and int8 deltas per channel.
 
     Parameters
     ----------
     data : array-like of shape (n_samples, n_channels)
         Multichannel sensor data (n_channels up to 8).
-    mode : int or str
-        0 / "rank" / "rank-only": Rank-only mode (lossy amplitude, exact rank order).
-        1 / "hybrid": Hybrid mode (stores quantized delta amplitudes).
-    step_size : float
-        Delta quantization step size for hybrid mode (default: 0.05).
+    mode : int
+        Format mode (0 = MODE_RANK_ONLY).
 
     Returns
     -------
@@ -181,20 +158,6 @@ def encode(
         raise ValueError(f"tngl format supports 1 to 8 channels, got {n_channels}")
     if n_samples < 1:
         raise ValueError("data must have at least 1 sample")
-
-    # Normalize mode
-    if isinstance(mode, str):
-        mode_str = mode.strip().lower()
-        if mode_str in ("rank", "rank-only", "rank_only"):
-            mode_int = MODE_RANK_ONLY
-        elif mode_str == "hybrid":
-            mode_int = MODE_HYBRID
-        else:
-            raise ValueError(f"Unknown mode '{mode}'. Use 'rank-only' (0) or 'hybrid' (1)")
-    else:
-        mode_int = int(mode)
-        if mode_int not in (MODE_RANK_ONLY, MODE_HYBRID):
-            raise ValueError(f"Unknown mode code {mode_int}. Use 0 (rank-only) or 1 (hybrid)")
 
     num_ticks = n_samples - 1
 
@@ -228,7 +191,7 @@ def encode(
         n_channels,
         raw_generator_count,
         reduced_generator_count,
-        mode_int,
+        MODE_RANK_ONLY,
     )
 
     # Anchor snapshot (float32 per channel)
@@ -240,31 +203,14 @@ def encode(
     # Payload: 4-bit packed generators
     payload = _pack_generators(reduced_generators)
 
-    # Hybrid section (if mode == 1)
-    hybrid_bytes = bytearray()
-    if mode_int == MODE_HYBRID:
-        hybrid_bytes.extend(struct.pack("<f", float(step_size)))
-        # Closed-loop delta modulation
-        prev_recon = arr[0].copy()
-        deltas = []
-        for t in range(1, n_samples):
-            diff = arr[t] - prev_recon
-            q = np.clip(np.round(diff / step_size), -128, 127).astype(np.int8)
-            deltas.append(q)
-            prev_recon += q.astype(np.float32) * step_size
-        hybrid_bytes.extend(np.array(deltas, dtype=np.int8).tobytes())
-
-    return header + anchor + timing + payload + bytes(hybrid_bytes)
+    return header + anchor + timing + payload
 
 
 def decode(data_bytes: bytes) -> np.ndarray:
-    """Decode a .tngl binary stream into a reconstructed multichannel array.
+    """Decode a rank-only .tngl binary stream into a reconstructed rank-order array.
 
-    - Rank-only decode (mode 0): Reconstructs channel rank order per tick.
-      Amplitude values correspond to the channel's rank (0.0 to n-1.0).
-      Documented as lossy with respect to continuous amplitudes.
-    - Hybrid decode (mode 1): Reconstructs approximate continuous amplitudes
-      using the anchor frame and quantized delta steps.
+    Reconstructs the channel rank order per tick. Values correspond to each channel's
+    rank position (0.0 to n-1.0).
 
     Parameters
     ----------
@@ -274,7 +220,7 @@ def decode(data_bytes: bytes) -> np.ndarray:
     Returns
     -------
     np.ndarray
-        Array of shape (n_samples, n_channels) with float32 values.
+        Array of shape (n_samples, n_channels) with reconstructed rank values.
     """
     if len(data_bytes) < HEADER_SIZE:
         raise ValueError(f"Data too short to contain header ({len(data_bytes)} bytes)")
@@ -307,51 +253,26 @@ def decode(data_bytes: bytes) -> np.ndarray:
     offset += packed_size
     reduced_generators = _unpack_generators(gen_bytes, reduced_gen_count)
 
-    # Reconstruct
+    # Reconstruct rank order per tick
     reconstructed = np.zeros((n_samples, n_channels), dtype=np.float32)
+    current_order = rank_vector(anchor)
+    for c in range(n_channels):
+        reconstructed[0, c] = float(current_order.index(c))
 
-    if mode == MODE_RANK_ONLY:
-        # Reconstruct rank order per tick
-        current_order = rank_vector(anchor)
+    gen_ptr = 0
+    for t in range(num_ticks):
+        cnt = per_tick_counts[t]
+        tick_gens = reduced_generators[gen_ptr : gen_ptr + cnt]
+        gen_ptr += cnt
+
+        for g in tick_gens:
+            swap_idx = abs(g) - 1
+            current_order[swap_idx], current_order[swap_idx + 1] = (
+                current_order[swap_idx + 1],
+                current_order[swap_idx],
+            )
+
         for c in range(n_channels):
-            reconstructed[0, c] = float(current_order.index(c))
-
-        gen_ptr = 0
-        for t in range(num_ticks):
-            cnt = per_tick_counts[t]
-            tick_gens = reduced_generators[gen_ptr : gen_ptr + cnt]
-            gen_ptr += cnt
-
-            for g in tick_gens:
-                swap_idx = abs(g) - 1
-                current_order[swap_idx], current_order[swap_idx + 1] = (
-                    current_order[swap_idx + 1],
-                    current_order[swap_idx],
-                )
-
-            for c in range(n_channels):
-                reconstructed[t + 1, c] = float(current_order.index(c))
-
-    elif mode == MODE_HYBRID:
-        # Read step_size and int8 deltas
-        if len(data_bytes) < offset + 4:
-            raise ValueError("Corrupt file: missing hybrid step size")
-        step_size = struct.unpack_from("<f", data_bytes, offset)[0]
-        offset += 4
-
-        delta_bytes_len = num_ticks * n_channels
-        if len(data_bytes) < offset + delta_bytes_len:
-            raise ValueError("Corrupt file: truncated hybrid deltas")
-
-        deltas = np.frombuffer(
-            data_bytes[offset : offset + delta_bytes_len], dtype=np.int8
-        ).reshape((num_ticks, n_channels))
-
-        reconstructed[0] = anchor
-        for t in range(num_ticks):
-            reconstructed[t + 1] = reconstructed[t] + deltas[t].astype(np.float32) * step_size
-
-    else:
-        raise ValueError(f"Unsupported mode {mode} in decode")
+            reconstructed[t + 1, c] = float(current_order.index(c))
 
     return reconstructed

@@ -14,7 +14,6 @@ from tanglecode.braid import (
     reduce_word_full,
 )
 from tanglecode.codec import (
-    MODE_HYBRID,
     MODE_RANK_ONLY,
     decode,
     encode,
@@ -37,7 +36,6 @@ __all__ = [
     "encode",
     "decode",
     "MODE_RANK_ONLY",
-    "MODE_HYBRID",
     "AnomalyRecord",
     "BraidAnomalyDetector",
     "compute_window_features",

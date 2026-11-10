@@ -7,7 +7,6 @@ import pytest
 from tanglecode.braid import rank_vector
 from tanglecode.codec import (
     MAGIC,
-    MODE_HYBRID,
     MODE_RANK_ONLY,
     _pack_generators,
     _pack_nibble,
@@ -61,23 +60,6 @@ def test_header_structure():
     assert n == 4
     assert raw_count >= reduced_count
     assert mode == MODE_RANK_ONLY
-
-
-def test_roundtrip_hybrid_mode():
-    """Verify encode and decode roundtrip in hybrid mode preserving approximate amplitudes."""
-    data = generate_synthetic(n_channels=6, n_samples=300, noise_std=0.02, seed=99)
-    step_size = 0.02
-
-    encoded = encode(data, mode=MODE_HYBRID, step_size=step_size)
-    reconstructed = decode(encoded)
-
-    assert reconstructed.shape == data.shape
-    # Anchor frame at t=0 must match float32 precision exactly
-    np.testing.assert_allclose(reconstructed[0], data[0], atol=1e-6)
-
-    # Reconstructed continuous amplitude must remain within quantization tolerance
-    max_err = np.max(np.abs(reconstructed - data))
-    assert max_err <= step_size * 2.0
 
 
 def test_roundtrip_rank_only_mode():
