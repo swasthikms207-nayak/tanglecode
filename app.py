@@ -1,8 +1,10 @@
-"""TangleCode: Single-page Streamlit application for topological braid sensor encoding."""
+"""TangleCode: Two-page Streamlit application for topological braid sensor encoding."""
 
 import io
+import struct
 import tempfile
 from pathlib import Path
+from typing import List, Tuple
 
 import numpy as np
 import plotly.graph_objects as go
@@ -15,245 +17,310 @@ from tanglecode.data import generate_synthetic, inject_fault, load_csv
 
 # Page configuration
 st.set_page_config(
-    page_title="TangleCode | Topological Braid Sensor Compression & Anomaly Detection",
+    page_title="TangleCode",
     page_icon="🧬",
     layout="wide",
 )
 
-# -----------------------------------------------------------------------------
-# 1. Explanation of the idea and visible note
-# -----------------------------------------------------------------------------
-st.title("🧬 TangleCode")
-st.markdown(
-    """
-    High-frequency multichannel sensor streams (such as IMUs, EEGs, and strain gauges) are inundated with
-    jitter and measurement noise. Instead of filtering signals in the noisy amplitude domain, **TangleCode**
-    maps multichannel sensor rank ordering into the **Artin Braid Group \\(B_n\\)**. Transient noise loops
-    collapse to identity via Reidemeister II topological cancellations ($\\sigma_i \\sigma_i^{-1} \\to 1$),
-    while true physical dynamics and sensor faults generate persistent topological tangles. This unlocks extreme
-    lossless-rank compression and sensitive streaming anomaly detection directly in the topological domain.
-    """
-)
+# Initialize session state for navigation
+if "page" not in st.session_state:
+    st.session_state["page"] = "input"
+if "results" not in st.session_state:
+    st.session_state["results"] = None
 
-st.info(
-    "**Note:** Rank-only mode keeps sensor ordering and discards exact amplitudes. "
-    "It is built for structure and fault monitoring, not full recovery."
-)
 
-# -----------------------------------------------------------------------------
-# 2. Controls: noise slider, "Inject fault" selectbox, CSV upload option
-# -----------------------------------------------------------------------------
-st.subheader("Controls")
-ctrl_col1, ctrl_col2, ctrl_col3 = st.columns(3)
+def merge_flagged_intervals(flagged_starts: List[int], window_size: int) -> List[Tuple[int, int]]:
+    """Merge overlapping or adjacent flagged window spans into contiguous intervals."""
+    if not flagged_starts:
+        return []
+    sorted_starts = sorted(flagged_starts)
+    intervals: List[Tuple[int, int]] = []
+    curr_start = sorted_starts[0]
+    curr_end = curr_start + window_size
 
-with ctrl_col1:
-    noise_level = st.slider(
-        "Jitter Noise Level",
-        min_value=0.00,
-        max_value=0.20,
-        value=0.05,
-        step=0.01,
-        help="Standard deviation of additive Gaussian noise.",
+    for start in sorted_starts[1:]:
+        end = start + window_size
+        if start <= curr_end:
+            curr_end = max(curr_end, end)
+        else:
+            intervals.append((curr_start, curr_end))
+            curr_start = start
+            curr_end = end
+    intervals.append((curr_start, curr_end))
+    return intervals
+
+
+# =============================================================================
+# PAGE 1: INPUT
+# =============================================================================
+if st.session_state["page"] == "input":
+    st.title("TangleCode")
+    st.write("Topological braid group encoding and streaming anomaly detection for multichannel sensor streams.")
+
+    source_option = st.radio(
+        "Data source",
+        options=["Upload CSV", "Use a sample"],
+        horizontal=True,
     )
 
-with ctrl_col2:
-    fault_type = st.selectbox(
-        "Inject fault",
-        options=["none", "drift", "stuck"],
-        index=0,
-        help="Simulate sensor failure: none, drift (linear offset), or stuck (frozen sensor).",
+    uploaded_file = None
+    sample_choice = None
+
+    if source_option == "Upload CSV":
+        uploaded_file = st.file_uploader(
+            "Upload CSV (each numeric column is one sensor channel)",
+            type=["csv"],
+            help="Upload a CSV file containing at least 2 numeric columns.",
+        )
+    else:
+        sample_choice = st.selectbox(
+            "Choose a sample dataset:",
+            options=[
+                "Clean drone IMU",
+                "IMU with drifting sensor",
+                "IMU with stuck sensor",
+            ],
+        )
+
+    if st.button("Analyze", type="primary"):
+        data = None
+        dataset_name = ""
+
+        if source_option == "Upload CSV":
+            if uploaded_file is None:
+                st.error("Please upload a CSV file before analyzing.")
+            else:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
+                    tmp.write(uploaded_file.getvalue())
+                    tmp_path = Path(tmp.name)
+                try:
+                    loaded = load_csv(tmp_path)
+                    if loaded.ndim != 2 or loaded.shape[1] < 2:
+                        st.error("Uploaded CSV must have at least 2 numeric columns.")
+                    elif loaded.shape[0] < 10:
+                        st.error("Uploaded CSV must contain at least 10 sample rows.")
+                    else:
+                        if loaded.shape[1] > 8:
+                            st.warning("Data has more than 8 channels. Using the first 8 channels supported by .tngl.")
+                            loaded = loaded[:, :8]
+                        data = loaded
+                        dataset_name = uploaded_file.name
+                except Exception as e:
+                    st.error(f"Error loading CSV: {e}")
+                finally:
+                    if tmp_path.exists():
+                        tmp_path.unlink()
+        else:
+            dataset_name = sample_choice
+            n_samples = 3000
+            n_channels = 6
+            clean_stream = generate_synthetic(
+                n_channels=n_channels,
+                n_samples=n_samples,
+                noise_std=0.03,
+                seed=42,
+            )
+            if sample_choice == "Clean drone IMU":
+                data = clean_stream
+            elif sample_choice == "IMU with drifting sensor":
+                data = inject_fault(clean_stream, start=1500, kind="drift", channel=0, drift_slope=0.015)
+            elif sample_choice == "IMU with stuck sensor":
+                data = inject_fault(clean_stream, start=1500, kind="stuck", channel=1)
+
+        if data is not None:
+            n_samples, n_channels = data.shape
+
+            # 1. Rank extraction and raw braid crossings
+            total_raw_crossings = 0
+            for t in range(n_samples - 1):
+                w = extract_braid_word(rank_vector(data[t]), rank_vector(data[t + 1]))
+                total_raw_crossings += len(w)
+
+            # 2. Encode to rank-only .tngl binary format
+            tngl_bytes = encode(data, mode=MODE_RANK_ONLY)
+            _, _, _, total_reduced_crossings, _ = struct.unpack_from("<4sBIIB", tngl_bytes, 0)
+
+            # 3. Compute compression ratio vs raw CSV representation
+            csv_buf = io.StringIO()
+            csv_buf.write(",".join(f"Ch_{c}" for c in range(n_channels)) + "\n")
+            for row in data:
+                csv_buf.write(",".join(f"{v:.6f}" for v in row) + "\n")
+            raw_csv_size = len(csv_buf.getvalue().encode("utf-8"))
+            tngl_size = len(tngl_bytes)
+            compression_ratio = raw_csv_size / tngl_size if tngl_size > 0 else 1.0
+
+            # 4. Anomaly detection via sliding window braid reductions
+            window_size = min(200, max(20, n_samples // 6))
+            step = max(5, window_size // 15)
+            n_baseline = min(35, max(5, (n_samples // 2 - window_size) // step))
+
+            detector = BraidAnomalyDetector(
+                window_size=window_size,
+                n_baseline=n_baseline,
+                k=2.5,
+                step=step,
+            )
+            records = detector.predict(data)
+
+            # Store results in session_state and transition to Page 2
+            st.session_state["results"] = {
+                "dataset_name": dataset_name,
+                "n_channels": n_channels,
+                "n_samples": n_samples,
+                "raw_crossings": total_raw_crossings,
+                "reduced_crossings": total_reduced_crossings,
+                "raw_csv_size": raw_csv_size,
+                "tngl_size": tngl_size,
+                "compression_ratio": compression_ratio,
+                "tngl_bytes": tngl_bytes,
+                "window_size": window_size,
+                "step": step,
+                "baseline_mean": detector.baseline_mean,
+                "baseline_std": detector.baseline_std,
+                "k": detector.k,
+                "records": records,
+            }
+            st.session_state["page"] = "results"
+            st.rerun()
+
+
+# =============================================================================
+# PAGE 2: RESULTS
+# =============================================================================
+elif st.session_state["page"] == "results":
+    res = st.session_state.get("results")
+    if res is None:
+        st.session_state["page"] = "input"
+        st.rerun()
+
+    # Dataset title and metadata
+    st.title("TangleCode")
+    st.subheader(f"Dataset: {res['dataset_name']}")
+    st.caption(f"Channels: **{res['n_channels']}** | Samples: **{res['n_samples']:,}**")
+
+    # Three headline metric cards
+    col1, col2, col3 = st.columns(3)
+    raw_cnt = res["raw_crossings"]
+    red_cnt = res["reduced_crossings"]
+    elim_pct = ((raw_cnt - red_cnt) / raw_cnt * 100.0) if raw_cnt > 0 else 0.0
+
+    col1.metric("Raw Crossings", f"{raw_cnt:,}")
+    col2.metric(
+        "Reduced Crossings",
+        f"{red_cnt:,}",
+        delta=f"-{elim_pct:.1f}% jitter" if raw_cnt > 0 else None,
+    )
+    col3.metric(
+        "Compression Ratio",
+        f"{res['compression_ratio']:.1f}x",
+        delta=f"{res['raw_csv_size']:,} B → {res['tngl_size']:,} B",
     )
 
-with ctrl_col3:
-    uploaded_file = st.file_uploader(
-        "CSV upload option (optional)",
-        type=["csv"],
-        help="Upload custom sensor CSV (numeric columns used as channels, up to 8 channels).",
-    )
+    st.write("")
 
-# Load or generate dataset
-if uploaded_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
-        tmp.write(uploaded_file.getvalue())
-        tmp_path = Path(tmp.name)
-    try:
-        raw_data = load_csv(tmp_path)
-        if raw_data.shape[1] > 8:
-            raw_data = raw_data[:, :8]
-            st.warning("Data truncated to first 8 channels (maximum supported by .tngl format).")
-        if noise_level > 0.0:
-            rng = np.random.default_rng(42)
-            raw_data = raw_data + rng.normal(0.0, noise_level, size=raw_data.shape).astype(np.float32)
-    finally:
-        if tmp_path.exists():
-            tmp_path.unlink()
-else:
-    raw_data = generate_synthetic(
-        n_channels=8,
-        n_samples=3000,
-        noise_std=noise_level,
-        seed=42,
-    )
+    # Plotly Chart: reduced braid-word length per window with flagged anomaly windows shaded red
+    records = res["records"]
+    window_starts = [r.window_start for r in records]
+    reduced_lengths = [r.reduced_length for r in records]
+    flagged_starts = [r.window_start for r in records if r.flagged]
+    flagged_lengths = [r.reduced_length for r in records if r.flagged]
 
-# Apply fault injection if requested
-if fault_type != "none":
-    fault_start = len(raw_data) // 2
-    active_data = inject_fault(raw_data, start=fault_start, kind=fault_type, channel=0)
-else:
-    active_data = raw_data
+    fig = go.Figure()
 
-# -----------------------------------------------------------------------------
-# 3. Three headline metrics: raw crossings, reduced crossings, compression ratio
-# -----------------------------------------------------------------------------
-# Encode with TangleCode rank-only
-tngl_bytes = encode(active_data, mode=MODE_RANK_ONLY)
+    # Shade flagged anomaly window spans in red
+    flagged_intervals = merge_flagged_intervals(flagged_starts, res["window_size"])
+    for idx, (x0, x1) in enumerate(flagged_intervals):
+        fig.add_vrect(
+            x0=x0,
+            x1=x1,
+            fillcolor="rgba(239, 68, 68, 0.25)",
+            line_width=1,
+            line_color="rgba(239, 68, 68, 0.5)",
+            layer="below",
+            annotation_text="Anomaly" if idx == 0 else None,
+            annotation_position="top left",
+        )
 
-# Measure raw crossings
-n_samples, n_channels = active_data.shape
-total_raw_crossings = 0
-for t in range(n_samples - 1):
-    w = extract_braid_word(rank_vector(active_data[t]), rank_vector(active_data[t + 1]))
-    total_raw_crossings += len(w)
-
-# Extract reduced crossings from header (bytes 5..8 is raw, 9..12 is reduced)
-import struct
-_, _, _, total_reduced_crossings, _ = struct.unpack_from("<4sBIIB", tngl_bytes, 0)
-
-# Format raw CSV bytes to measure true compression ratio
-csv_buffer = io.StringIO()
-csv_buffer.write(",".join(f"Ch_{c}" for c in range(n_channels)) + "\n")
-for row in active_data:
-    csv_buffer.write(",".join(f"{v:.6f}" for v in row) + "\n")
-raw_csv_size = len(csv_buffer.getvalue().encode("utf-8"))
-tngl_size = len(tngl_bytes)
-compression_ratio = raw_csv_size / tngl_size if tngl_size > 0 else 1.0
-
-st.subheader("Headline Metrics")
-metric_col1, metric_col2, metric_col3 = st.columns(3)
-
-with metric_col1:
-    st.metric(
-        label="Raw Crossings",
-        value=f"{total_raw_crossings:,}",
-        help="Total Artin braid generators emitted before topological reduction.",
-    )
-
-with metric_col2:
-    eliminated_pct = (
-        ((total_raw_crossings - total_reduced_crossings) / total_raw_crossings * 100.0)
-        if total_raw_crossings > 0
-        else 0.0
-    )
-    st.metric(
-        label="Reduced Crossings",
-        value=f"{total_reduced_crossings:,}",
-        delta=f"-{eliminated_pct:.1f}% jitter eliminated" if total_raw_crossings > 0 else None,
-        help="Irreducible topological crossings after Reidemeister II & commuting reductions.",
-    )
-
-with metric_col3:
-    st.metric(
-        label="Compression Ratio",
-        value=f"{compression_ratio:.1f}x",
-        delta=f"{raw_csv_size:,} B → {tngl_size:,} B",
-        help="Ratio of raw CSV representation size to compressed .tngl binary size.",
-    )
-
-# -----------------------------------------------------------------------------
-# 4. One Plotly chart: reduced braid-word length per window, with flagged anomaly windows
-# -----------------------------------------------------------------------------
-st.subheader("Topological Anomaly Detection")
-
-# Slide window and compute anomaly records
-detector = BraidAnomalyDetector(
-    window_size=200,
-    n_baseline=30,
-    k=2.5,
-    step=15,
-)
-records = detector.predict(active_data)
-
-window_starts = [r.window_start for r in records]
-reduced_lengths = [r.reduced_length for r in records]
-flagged_starts = [r.window_start for r in records if r.flagged]
-flagged_lengths = [r.reduced_length for r in records if r.flagged]
-
-fig = go.Figure()
-
-# Plot reduced word length trajectory
-fig.add_trace(
-    go.Scatter(
-        x=window_starts,
-        y=reduced_lengths,
-        mode="lines",
-        name="Reduced Braid-Word Length",
-        line=dict(color="#00d2ff", width=2),
-        hovertemplate="Tick %{x}<br>Reduced Length: %{y}<extra></extra>",
-    )
-)
-
-# Baseline threshold if available
-if detector.baseline_mean is not None and detector.baseline_std is not None:
-    mean_val = detector.baseline_mean
-    upper_thresh = mean_val + detector.k * detector.baseline_std
-    fig.add_hline(
-        y=upper_thresh,
-        line=dict(color="#ff9900", dash="dash", width=1.5),
-        annotation_text=f"Threshold (μ + {detector.k}σ = {upper_thresh:.1f})",
-        annotation_position="top right",
-    )
-    fig.add_hline(
-        y=mean_val,
-        line=dict(color="#888888", dash="dot", width=1.0),
-        annotation_text=f"Baseline Mean ({mean_val:.1f})",
-        annotation_position="bottom right",
-    )
-
-# Highlight flagged anomaly windows
-if flagged_starts:
+    # Line trace for reduced braid-word length
     fig.add_trace(
         go.Scatter(
-            x=flagged_starts,
-            y=flagged_lengths,
-            mode="markers",
-            name="Flagged Anomaly",
-            marker=dict(
-                color="#ff0055",
-                size=11,
-                symbol="diamond",
-                line=dict(width=1, color="#ffffff"),
-            ),
-            hovertemplate="<b>ANOMALY DETECTED</b><br>Tick %{x}<br>Length: %{y}<extra></extra>",
+            x=window_starts,
+            y=reduced_lengths,
+            mode="lines",
+            name="Reduced Braid-Word Length",
+            line=dict(color="#0284c7", width=2),
+            hovertemplate="Tick %{x}<br>Reduced Length: %{y}<extra></extra>",
         )
     )
 
-fig.update_layout(
-    template="plotly_dark",
-    title="Irreducible Braid-Word Length per Sliding Window",
-    xaxis_title="Time Tick (Window Start)",
-    yaxis_title="Irreducible Reduced-Word Length",
-    height=420,
-    margin=dict(l=40, r=40, t=50, b=40),
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="right",
-        x=1.0,
-    ),
-)
+    # Flagged anomaly points
+    if flagged_starts:
+        fig.add_trace(
+            go.Scatter(
+                x=flagged_starts,
+                y=flagged_lengths,
+                mode="markers",
+                name="Flagged Anomaly Windows",
+                marker=dict(color="#dc2626", size=8, symbol="diamond"),
+                hovertemplate="Flagged Tick %{x}<br>Length: %{y}<extra></extra>",
+            )
+        )
 
-st.plotly_chart(fig, use_container_width=True)
+    # Baseline threshold line if available
+    if res["baseline_mean"] is not None and res["baseline_std"] is not None:
+        thresh = res["baseline_mean"] + res["k"] * res["baseline_std"]
+        fig.add_hline(
+            y=thresh,
+            line=dict(color="#f59e0b", dash="dash", width=1.5),
+            annotation_text=f"Threshold ({thresh:.1f})",
+            annotation_position="top right",
+        )
 
-# -----------------------------------------------------------------------------
-# 5. Download button for the .tngl file
-# -----------------------------------------------------------------------------
-st.subheader("Export")
-filename = "sensor_data.tngl"
-st.download_button(
-    label="⬇️ Download .tngl file",
-    data=tngl_bytes,
-    file_name=filename,
-    mime="application/octet-stream",
-    help="Download compressed topological .tngl binary file.",
-)
+    fig.update_layout(
+        template="plotly_white",
+        title="Reduced Braid-Word Length per Sliding Window",
+        xaxis_title="Time Tick (Window Start)",
+        yaxis_title="Irreducible Reduced-Word Length",
+        height=380,
+        margin=dict(l=40, r=40, t=50, b=40),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1.0),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Plain caption under chart stating whether anomalies were detected and in which time range
+    if flagged_intervals:
+        range_strs = [f"ticks {x0}–{x1}" for x0, x1 in flagged_intervals]
+        caption_text = f"Anomalies detected: Yes, in time range {', '.join(range_strs)}."
+    else:
+        caption_text = "Anomalies detected: None. Sensor signals remained within normal baseline boundaries."
+    st.caption(caption_text)
+
+    st.write("")
+
+    # Download button for the .tngl file
+    download_filename = (
+        Path(res["dataset_name"]).stem + ".tngl"
+        if res["dataset_name"].endswith(".csv")
+        else "sensor_data.tngl"
+    )
+    st.download_button(
+        label="Download .tngl file",
+        data=res["tngl_bytes"],
+        file_name=download_filename,
+        mime="application/octet-stream",
+    )
+
+    # Small note
+    st.caption(
+        "Rank-only mode keeps sensor ordering and discards exact amplitudes. "
+        "Built for structure and fault monitoring, not full recovery."
+    )
+
+    st.write("")
+
+    # Back button to clear results and return to Page 1
+    if st.button("Back"):
+        st.session_state["results"] = None
+        st.session_state["page"] = "input"
+        st.rerun()
