@@ -1,0 +1,116 @@
+{
+  "synthetic": {
+    "dataset_name": "Synthetic IMU (8 ch, 5000 samples)",
+    "n_samples": 5000,
+    "n_channels": 8,
+    "raw_csv_size_bytes": 382564,
+    "total_raw_crossings": 2113,
+    "methods": {
+      "Raw CSV": {
+        "compressed_size_bytes": 382564,
+        "compression_ratio": 1.0,
+        "crossings_eliminated_pct": 0.0,
+        "encode_time_per_frame_us": 0.0,
+        "kendall_tau": 1.0,
+        "rmse": 0.0
+      },
+      "gzip (CSV)": {
+        "compressed_size_bytes": 163960,
+        "compression_ratio": 2.3332764088802147,
+        "crossings_eliminated_pct": 0.0,
+        "encode_time_per_frame_us": 4.1586400009691715,
+        "kendall_tau": 1.0,
+        "rmse": 0.0
+      },
+      "zstandard (float32)": {
+        "compressed_size_bytes": 147949,
+        "compression_ratio": 2.585782938715368,
+        "crossings_eliminated_pct": 0.0,
+        "encode_time_per_frame_us": 1.4933799859136343,
+        "kendall_tau": 1.0,
+        "rmse": 0.0
+      },
+      "Hysteresis Baseline": {
+        "compressed_size_bytes": 7568,
+        "compression_ratio": 50.550211416490484,
+        "crossings_eliminated_pct": 57.264552768575484,
+        "encode_time_per_frame_us": 18.551139999181032,
+        "kendall_tau": 0.985071428571438,
+        "rmse": null
+      },
+      "TangleCode Rank-Only": {
+        "compressed_size_bytes": 4111,
+        "compression_ratio": 93.05862320603259,
+        "crossings_eliminated_pct": 81.21154756270705,
+        "encode_time_per_frame_us": 16.58815999981016,
+        "kendall_tau": 0.9194142857142901,
+        "rmse": null
+      },
+      "TangleCode Hybrid": {
+        "compressed_size_bytes": 44107,
+        "compression_ratio": 8.673543881923504,
+        "crossings_eliminated_pct": 81.21154756270705,
+        "encode_time_per_frame_us": 33.596480009146035,
+        "kendall_tau": 0.9975857142857163,
+        "rmse": 0.00577043229714036
+      }
+    }
+  },
+  "real": {
+    "dataset_name": "Real CSV: real.csv",
+    "n_samples": 500,
+    "n_channels": 6,
+    "raw_csv_size_bytes": 28516,
+    "total_raw_crossings": 382,
+    "methods": {
+      "Raw CSV": {
+        "compressed_size_bytes": 28516,
+        "compression_ratio": 1.0,
+        "crossings_eliminated_pct": 0.0,
+        "encode_time_per_frame_us": 0.0,
+        "kendall_tau": 1.0,
+        "rmse": 0.0
+      },
+      "gzip (CSV)": {
+        "compressed_size_bytes": 10570,
+        "compression_ratio": 2.6978240302743615,
+        "crossings_eliminated_pct": 0.0,
+        "encode_time_per_frame_us": 2.7384001296013594,
+        "kendall_tau": 1.0,
+        "rmse": 0.0
+      },
+      "zstandard (float32)": {
+        "compressed_size_bytes": 11163,
+        "compression_ratio": 2.5545104362626536,
+        "crossings_eliminated_pct": 0.0,
+        "encode_time_per_frame_us": 0.43780007399618626,
+        "kendall_tau": 1.0,
+        "rmse": 0.0
+      },
+      "Hysteresis Baseline": {
+        "compressed_size_bytes": 1515,
+        "compression_ratio": 18.822442244224423,
+        "crossings_eliminated_pct": 56.54450261780105,
+        "encode_time_per_frame_us": 10.819399962201715,
+        "kendall_tau": 0.9040000000000027,
+        "rmse": null
+      },
+      "TangleCode Rank-Only": {
+        "compressed_size_bytes": 1493,
+        "compression_ratio": 19.09979906229069,
+        "crossings_eliminated_pct": 52.35602094240838,
+        "encode_time_per_frame_us": 13.260799925774336,
+        "kendall_tau": 0.9605333333333345,
+        "rmse": null
+      },
+      "TangleCode Hybrid": {
+        "compressed_size_bytes": 4491,
+        "compression_ratio": 6.349588065018927,
+        "crossings_eliminated_pct": 52.35602094240838,
+        "encode_time_per_frame_us": 30.64239979721606,
+        "kendall_tau": 0.9832000000000007,
+        "rmse": 0.005759375169873238
+      }
+    }
+  }
+}
