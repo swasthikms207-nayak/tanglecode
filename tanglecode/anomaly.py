@@ -389,3 +389,17 @@ def diagnose_window_fault(
         channel_z_scores=effective_scores,
     )
 
+
+__all__ = [
+    "AnomalyRecord",
+    "WindowBraidFeatures",
+    "compute_window_features",
+    "BraidAnomalyDetector",
+    "detect_anomalies",
+    "ChannelFaultDiagnosis",
+    "count_surviving_crossings_per_channel",
+    "learn_channel_baseline",
+    "diagnose_window_fault",
+]
+
+
