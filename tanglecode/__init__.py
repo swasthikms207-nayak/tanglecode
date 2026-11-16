@@ -1,4 +1,4 @@
-"""Tanglecode: braid analysis, data simulation, and topological codec."""
+"""Tanglecode: braid analysis, data simulation, topological codec, and anomaly detection."""
 
 from typing import Any
 
@@ -22,6 +22,7 @@ __all__ = [
     "decode",
     "generate_signals",
     "load_csv",
+    "detect",
 ]
 
 
@@ -34,4 +35,8 @@ def __getattr__(name: str) -> Any:
         import tanglecode.codec as _codec
 
         return getattr(_codec, name)
+    if name == "detect":
+        import tanglecode.anomaly as _anomaly
+
+        return getattr(_anomaly, name)
     raise AttributeError(f"module 'tanglecode' has no attribute '{name}'")
