@@ -1,0 +1,119 @@
+{
+  "clean": {
+    "dataset_name": "Clean",
+    "n_samples": 3000,
+    "n_channels": 6,
+    "raw_csv_bytes": 135484,
+    "gzip_bytes": 49467,
+    "methods": {
+      "Raw CSV": {
+        "bytes": 135484,
+        "ratio_vs_raw_csv": 1.0,
+        "ratio_vs_gzip": 0.3651132237016917,
+        "crossings_before": 2417,
+        "crossings_after": 2417
+      },
+      "gzip (CSV)": {
+        "bytes": 49467,
+        "ratio_vs_raw_csv": 2.7388764226656153,
+        "ratio_vs_gzip": 1.0,
+        "crossings_before": 2417,
+        "crossings_after": 2417
+      },
+      "Hysteresis baseline": {
+        "bytes": 215,
+        "ratio_vs_raw_csv": 630.1581395348837,
+        "ratio_vs_gzip": 230.07906976744187,
+        "crossings_before": 2417,
+        "crossings_after": 111,
+        "estimated_noise_std": 0.059703243557982406,
+        "h": 0.11940648711596481
+      },
+      "TangleCode (with reduction)": {
+        "bytes": 119,
+        "ratio_vs_raw_csv": 1138.5210084033613,
+        "ratio_vs_gzip": 415.6890756302521,
+        "crossings_before": 2417,
+        "crossings_after": 47
+      }
+    }
+  },
+  "drift": {
+    "dataset_name": "Drift",
+    "n_samples": 3000,
+    "n_channels": 6,
+    "raw_csv_bytes": 134966,
+    "gzip_bytes": 49989,
+    "methods": {
+      "Raw CSV": {
+        "bytes": 134966,
+        "ratio_vs_raw_csv": 1.0,
+        "ratio_vs_gzip": 0.370382170324378,
+        "crossings_before": 2027,
+        "crossings_after": 2027
+      },
+      "gzip (CSV)": {
+        "bytes": 49989,
+        "ratio_vs_raw_csv": 2.6999139810758366,
+        "ratio_vs_gzip": 1.0,
+        "crossings_before": 2027,
+        "crossings_after": 2027
+      },
+      "Hysteresis baseline": {
+        "bytes": 203,
+        "ratio_vs_raw_csv": 664.8571428571429,
+        "ratio_vs_gzip": 246.2512315270936,
+        "crossings_before": 2027,
+        "crossings_after": 103,
+        "estimated_noise_std": 0.059703243557982406,
+        "h": 0.11940648711596481
+      },
+      "TangleCode (with reduction)": {
+        "bytes": 95,
+        "ratio_vs_raw_csv": 1420.6947368421052,
+        "ratio_vs_gzip": 526.2,
+        "crossings_before": 2027,
+        "crossings_after": 31
+      }
+    }
+  },
+  "stuck": {
+    "dataset_name": "Stuck",
+    "n_samples": 3000,
+    "n_channels": 6,
+    "raw_csv_bytes": 134956,
+    "gzip_bytes": 47431,
+    "methods": {
+      "Raw CSV": {
+        "bytes": 134956,
+        "ratio_vs_raw_csv": 1.0,
+        "ratio_vs_gzip": 0.35145528913127244,
+        "crossings_before": 2182,
+        "crossings_after": 2182
+      },
+      "gzip (CSV)": {
+        "bytes": 47431,
+        "ratio_vs_raw_csv": 2.845312137631507,
+        "ratio_vs_gzip": 1.0,
+        "crossings_before": 2182,
+        "crossings_after": 2182
+      },
+      "Hysteresis baseline": {
+        "bytes": 220,
+        "ratio_vs_raw_csv": 613.4363636363636,
+        "ratio_vs_gzip": 215.59545454545454,
+        "crossings_before": 2182,
+        "crossings_after": 115,
+        "estimated_noise_std": 0.05937946557248082,
+        "h": 0.11875893114496164
+      },
+      "TangleCode (with reduction)": {
+        "bytes": 101,
+        "ratio_vs_raw_csv": 1336.1980198019803,
+        "ratio_vs_gzip": 469.61386138613864,
+        "crossings_before": 2182,
+        "crossings_after": 36
+      }
+    }
+  }
+}
