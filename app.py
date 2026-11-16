@@ -17,6 +17,15 @@ from tanglecode.braid import (
 from tanglecode.codec import encode
 from tanglecode.data import generate_signals, load_csv
 
+def format_ordinal(val: int) -> str:
+    n = int(val)
+    if 11 <= (n % 100) <= 13:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
 # Page configuration
 st.set_page_config(
     page_title="TangleCode",
@@ -52,6 +61,15 @@ if st.session_state["page"] == "input":
     )
 
     st.write("")
+    sampling_rate_input = st.number_input(
+        "Sampling rate (Hz), optional",
+        min_value=0.0,
+        value=None,
+        step=1.0,
+        help="Optional sampling rate to convert ticks to seconds.",
+    )
+
+    st.write("")
     if st.button("Analyze", type="primary", use_container_width=True):
         data = None
         raw_csv_bytes = None
@@ -84,6 +102,7 @@ if st.session_state["page"] == "input":
                 st.warning(warning_msg)
 
             T, n = data.shape
+            rate = float(sampling_rate_input) if (sampling_rate_input is not None and sampling_rate_input > 0) else None
             initial_order, raw = word_from_frames(data)
             reduced, cancelled = reduce_crossings(raw)
             positions = replay_orders(initial_order, raw, T)
@@ -103,6 +122,8 @@ if st.session_state["page"] == "input":
 
             st.session_state["results"] = {
                 "dataset_name": dataset_name,
+                "n_sensors": n,
+                "sampling_rate": rate,
                 "raw_count": len(raw),
                 "reduced_count": len(reduced),
                 "raw_csv_bytes": raw_csv_bytes,
@@ -125,17 +146,52 @@ elif st.session_state["page"] == "results":
     raw_csv_bytes = res["raw_csv_bytes"]
     tngl_bytes = res["tngl_bytes"]
     dataset_name = res["dataset_name"]
+    rate = res.get("sampling_rate")
+    n_sensors = res.get("n_sensors", 6)
 
     # 1. Verdict banner
     if len(ranges) == 0:
         st.success("All sensors normal")
     else:
         first_fault = ranges[0]
-        st.error(
-            f"Fault detected: Sensor {first_fault['faulty_channel']}, "
-            f"around ticks {first_fault['start_tick']} to {first_fault['end_tick']}"
-        )
+        if rate:
+            start_s = first_fault["start_tick"] / rate
+            end_s = first_fault["end_tick"] / rate
+            st.error(
+                f"Fault detected: Sensor {first_fault['faulty_channel']}, "
+                f"around {start_s:.1f}s to {end_s:.1f}s"
+            )
+        else:
+            st.error(
+                f"Fault detected: Sensor {first_fault['faulty_channel']}, "
+                f"around ticks {first_fault['start_tick']} to {first_fault['end_tick']}"
+            )
 
+    # Fault description directly under verdict banner
+    pct_removed = ((raw_count - reduced_count) / raw_count * 100.0) if raw_count > 0 else 0.0
+    if len(ranges) == 0:
+        desc = f"All {n_sensors} sensors kept a steady order. {pct_removed:.1f}% of order swaps were noise and were removed."
+    else:
+        first_fault = ranges[0]
+        ch = first_fault["faulty_channel"]
+        kind = first_fault.get("kind", "drift")
+        severity = first_fault.get("severity", "Moderate")
+        if kind == "drift":
+            nb = format_ordinal(first_fault.get("rank_before", 1))
+            na = format_ordinal(first_fault.get("rank_after", 1))
+            desc = (
+                f"Sensor {ch} moved from {nb} to {na} place among the sensors and stayed there. "
+                f"It looks like it is drifting away from the group. "
+                f"Severity: {severity}"
+            )
+        else:
+            desc = (
+                f"Sensor {ch} started swapping places with the other sensors far more often than normal. "
+                f"It looks erratic. "
+                f"Severity: {severity}"
+            )
+
+    st.write(desc)
     st.write("")
 
     # 2. Three st.metric cards
@@ -147,7 +203,6 @@ elif st.session_state["page"] == "results":
         )
 
     with col2:
-        pct_removed = ((raw_count - reduced_count) / raw_count * 100.0) if raw_count > 0 else 0.0
         st.metric(
             label="After noise removal",
             value=f"{reduced_count:,}",
@@ -170,9 +225,10 @@ elif st.session_state["page"] == "results":
     fig = go.Figure()
 
     # Score per window as a line
+    x_vals = [t / rate for t in detection["window_start_ticks"]] if rate else detection["window_start_ticks"]
     fig.add_trace(
         go.Scatter(
-            x=detection["window_start_ticks"],
+            x=x_vals,
             y=detection["window_scores"],
             mode="lines+markers",
             name="Score",
@@ -195,9 +251,11 @@ elif st.session_state["page"] == "results":
 
     # Flagged ranges shaded red with the label "Fault"
     for i, r in enumerate(ranges):
+        x0 = r["start_tick"] / rate if rate else r["start_tick"]
+        x1 = r["end_tick"] / rate if rate else r["end_tick"]
         fig.add_vrect(
-            x0=r["start_tick"],
-            x1=r["end_tick"],
+            x0=x0,
+            x1=x1,
             fillcolor="#ff4b4b",
             opacity=0.2,
             line_width=0,
@@ -208,7 +266,7 @@ elif st.session_state["page"] == "results":
 
     fig.update_layout(
         title="Sensor behavior over time",
-        xaxis_title="Time (ticks)",
+        xaxis_title="Time (s)" if rate else "Time (ticks)",
         yaxis_title="Unusual behavior score",
         template="plotly_white",
         height=420,

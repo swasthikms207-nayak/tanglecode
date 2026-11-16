@@ -43,7 +43,12 @@ def test_detect_drift_flags_sensor_4():
         if 1300 <= r["start_tick"] <= 1700 and r["faulty_channel"] == 4
     ]
     assert len(matching) > 0
-    assert matching[0]["faulty_channel"] == 4
+    match = matching[0]
+    assert match["faulty_channel"] == 4
+    assert match["kind"] in ("drift", "erratic")
+    assert isinstance(match["rank_before"], int)
+    assert isinstance(match["rank_after"], int)
+    assert match["severity"] in ("Mild", "Moderate", "High")
 
 
 def test_detect_stuck_flags_sensor_4():
@@ -62,7 +67,29 @@ def test_detect_stuck_flags_sensor_4():
         if 1300 <= r["start_tick"] <= 1700 and r["faulty_channel"] == 4
     ]
     assert len(matching) > 0
-    assert matching[0]["faulty_channel"] == 4
+    match = matching[0]
+    assert match["faulty_channel"] == 4
+    assert match["kind"] in ("drift", "erratic")
+    assert isinstance(match["rank_before"], int)
+    assert isinstance(match["rank_after"], int)
+    assert match["severity"] in ("Mild", "Moderate", "High")
+
+
+def test_detect_erratic_classification():
+    """Erratic behavior (e.g. seed 42 clean dataset noise flare) is classified as erratic."""
+    seed_data = generate_signals("clean", n=6, T=3000, seed=42)
+    T, n = seed_data.shape
+    init_order, raw = word_from_frames(seed_data)
+    red, cancelled = reduce_crossings(raw)
+    positions = replay_orders(init_order, raw, T)
+
+    res = detect(red, positions, n=n, T=T, window=200, step=100, k=4.0, min_consecutive=4)
+    assert len(res["ranges"]) > 0
+    match = res["ranges"][0]
+    assert match["kind"] == "erratic"
+    assert match["severity"] in ("Mild", "Moderate", "High")
+    assert isinstance(match["rank_before"], int)
+    assert isinstance(match["rank_after"], int)
 
 
 def test_detect_empty_windows():

@@ -135,10 +135,38 @@ def detect(
         end_tick = window_starts[e_idx] + window
         ch_sums = np.sum(ch_scores[s_idx : e_idx + 1], axis=0)
         faulty_channel = int(np.argmax(ch_sums) + 1)  # 1-based
+        ch_idx = faulty_channel - 1
+
+        # kind: "drift" if faulty channel's rank-shift z-score is larger than
+        # its crossing-count z-score over the range, else "erratic"
+        z_rank_range = float(np.mean(np.abs(z_rank[s_idx : e_idx + 1, ch_idx])))
+        z_cross_range = float(np.mean(z_cross[s_idx : e_idx + 1, ch_idx]))
+        kind = "drift" if z_rank_range > z_cross_range else "erratic"
+
+        # rank_before: the channel's median position in the baseline windows (1-based, rounded)
+        rank_before = int(round(float(med_rank[ch_idx])))
+
+        # rank_after: its median position over the last windows of the range (1-based, rounded)
+        last_w = max(1, min(min_consecutive, e_idx - s_idx + 1))
+        rank_after = int(round(float(np.median(rank_mat[e_idx - last_w + 1 : e_idx + 1, ch_idx]))))
+
+        # severity: "Mild" if peak score < 1.5 * k, "Moderate" if < 3 * k, otherwise "High"
+        peak_score = float(np.max(window_scores[s_idx : e_idx + 1]))
+        if peak_score < 1.5 * k:
+            severity = "Mild"
+        elif peak_score < 3.0 * k:
+            severity = "Moderate"
+        else:
+            severity = "High"
+
         surviving_ranges.append({
             "start_tick": start_tick,
             "end_tick": end_tick,
             "faulty_channel": faulty_channel,
+            "kind": kind,
+            "rank_before": rank_before,
+            "rank_after": rank_after,
+            "severity": severity,
         })
 
     return {

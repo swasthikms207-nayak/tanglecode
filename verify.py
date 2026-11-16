@@ -112,6 +112,9 @@ def main():
     print(f"   Actual:   Flagged ranges -> {drift_ranges}")
     if matching_drift:
         print(f"   Matching range found: {matching_drift[0]}")
+        print(f"   Fault details: kind='{matching_drift[0]['kind']}', "
+              f"rank_before={matching_drift[0]['rank_before']}, rank_after={matching_drift[0]['rank_after']}, "
+              f"severity='{matching_drift[0]['severity']}'")
     if not check2_pass:
         all_passed = False
 
@@ -130,6 +133,9 @@ def main():
     print(f"   Actual:   Flagged ranges -> {stuck_ranges}")
     if matching_stuck:
         print(f"   Matching range found: {matching_stuck[0]}")
+        print(f"   Fault details: kind='{matching_stuck[0]['kind']}', "
+              f"rank_before={matching_stuck[0]['rank_before']}, rank_after={matching_stuck[0]['rank_after']}, "
+              f"severity='{matching_stuck[0]['severity']}'")
     if not check3_pass:
         all_passed = False
 
