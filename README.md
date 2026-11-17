@@ -1,10 +1,5 @@
 # TangleCode
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://tanglecode-zxmupxjpc47e7isiw2h38s.streamlit.app/)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests Passing](https://img.shields.io/badge/tests-28%20passed-brightgreen.svg)](tests/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
 **TangleCode** shrinks multi-sensor telemetry logs by up to **350×** and provides early warnings when a sensor begins drifting, sticking, or behaving erratically.
 
 🔗 **Live Web Application**: [https://tanglecode-zxmupxjpc47e7isiw2h38s.streamlit.app/](https://tanglecode-zxmupxjpc47e7isiw2h38s.streamlit.app/)
