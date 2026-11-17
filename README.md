@@ -197,6 +197,7 @@ tanglecode/
     ├── test_ranking.py      # Tests for sensor ranking tables, places 1..N, and suspect tagging
     └── test_report.py       # Tests for valid %PDF output and strict 1-page constraints
 ```
+```
 
 ## Limitations & Operational Scope
 
