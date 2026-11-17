@@ -12,6 +12,7 @@ When several sensors measure related signals (such as accelerometers or temperat
 2. **Order-Based Export**: Exports surviving swaps into a lightweight swap-log CSV format, drastically reducing storage size.
 3. **Fault Warning**: Detects when a sensor drifts or gets stuck, identifies which sensor is misbehaving (e.g., Sensor 4), and highlights when the fault occurred.
 4. **One-Page PDF Fault Report**: Generates an A4 summary report with verdict, metrics, downsampled multichannel readings, and highlighted fault zones.
+5. **Sensor Ranking at a Moment**: Interactively inspects relative sensor ranks and values across time, highlighting suspect sensors and tracking order changes compared with 100 ticks earlier.
 
 ---
 
@@ -127,4 +128,5 @@ The following measurements are copied directly from `results.json` (3,000 time t
    Select **"One sensor drifting"** (or upload `data/test_fault.csv`) and click **Analyze**.
    - Notice the red alert banner: **"Fault detected: Sensor 4, around ticks 1600 to 3000"** (detecting the drift injected at tick 1500).
    - In the plot, the score climbs above the dashed "Alert level", with the faulty interval shaded red.
+   - Use the **"Sensor ranking at a moment"** slider to watch Sensor 4 drift from 4th to 6th place and get highlighted in red as suspect.
    - Click **"Download swap log (CSV)"** to export the swap sequence, or **"Download fault report (PDF)"** to export a clean one-page diagnostic report.

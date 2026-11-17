@@ -24,6 +24,8 @@ __all__ = [
     "load_csv",
     "detect",
     "make_report_pdf",
+    "get_sensor_ranking",
+    "get_place_changes_caption",
 ]
 
 
@@ -48,4 +50,8 @@ def __getattr__(name: str) -> Any:
         import tanglecode.report as _report
 
         return getattr(_report, name)
+    if name in ("get_sensor_ranking", "get_place_changes_caption"):
+        import tanglecode.ranking as _ranking
+
+        return getattr(_ranking, name)
     raise AttributeError(f"module 'tanglecode' has no attribute '{name}'")

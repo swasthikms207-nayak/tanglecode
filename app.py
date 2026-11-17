@@ -17,6 +17,7 @@ from tanglecode.braid import (
 from tanglecode.data import generate_signals, load_csv
 from tanglecode.export import swap_log_csv
 from tanglecode.pipeline import compute_stats
+from tanglecode.ranking import get_place_changes_caption, get_sensor_ranking
 from tanglecode.report import make_report_pdf
 
 def format_ordinal(val: int) -> str:
@@ -389,9 +390,56 @@ elif st.session_state["page"] == "results":
 
     st.write("")
 
+    # 6. Sensor ranking at a moment
+    st.subheader("Sensor ranking at a moment")
+    st.caption("Move the slider to see which sensor reads lowest and which reads highest at any point in the recording.")
 
+    data = res.get("data")
+    T = res.get("T", data.shape[0] if data is not None else 3000)
+    default_tick = ranges[0]["start_tick"] if len(ranges) > 0 else (T // 2)
 
-    # 6. A "Back" button that clears results and returns to Page 1
+    if rate is not None and rate > 0:
+        max_time_s = float(round((T - 1) / rate, 1))
+        def_time_s = float(round(default_tick / rate, 1))
+        slider_time_s = st.slider(
+            "Time (s)",
+            min_value=0.0,
+            max_value=max_time_s,
+            value=def_time_s,
+            step=0.1,
+            format="%.1fs",
+            key="sensor_ranking_time_slider",
+        )
+        chosen_tick = int(round(slider_time_s * rate))
+        chosen_tick = max(0, min(T - 1, chosen_tick))
+    else:
+        chosen_tick = st.slider(
+            "Time (tick)",
+            min_value=0,
+            max_value=T - 1,
+            value=default_tick,
+            step=1,
+            key="sensor_ranking_time_slider",
+        )
+
+    if data is not None and 0 <= chosen_tick < len(data):
+        ranking_df = get_sensor_ranking(data, chosen_tick, ranges)
+
+        def highlight_fault(row):
+            if "(suspect)" in str(row["Sensor"]):
+                return ["background-color: #fee2e2; color: #b91c1c; font-weight: bold;"] * len(row)
+            return [""] * len(row)
+
+        styled_df = ranking_df.style.apply(highlight_fault, axis=1).format({"Reading": "{:.4f}"})
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+        caption_txt = get_place_changes_caption(data, chosen_tick)
+        if caption_txt is not None:
+            st.caption(caption_txt)
+
+    st.write("")
+
+    # 7. A "Back" button that clears results and returns to Page 1
     if st.button("Back", use_container_width=True):
         st.session_state["results"] = None
         st.session_state["page"] = "input"
