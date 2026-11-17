@@ -11,8 +11,8 @@ from tanglecode.braid import (
     replay_orders,
     word_from_frames,
 )
-from tanglecode.codec import decode, encode
 from tanglecode.data import generate_signals
+from tanglecode.pipeline import compute_stats
 
 
 def run_pipeline(data: np.ndarray, params: dict):
@@ -34,10 +34,9 @@ def run_pipeline(data: np.ndarray, params: dict):
         min_baseline_windows=params["min_baseline_windows"],
     )
 
-    tngl_bytes, stats = encode(data)
-    dec_n, dec_T, dec_anchor, dec_reduced = decode(tngl_bytes)
-    dec_positions = replay_orders(dec_anchor, dec_reduced, dec_T)
-    replayed_final = np.argsort(dec_positions[-1]).tolist()
+    stats = compute_stats(raw, reduced, cancelled)
+    replayed_positions = replay_orders(initial_order, reduced, T)
+    replayed_final = np.argsort(replayed_positions[-1]).tolist()
     true_final = order_from_frame(data[-1])
 
     return {
@@ -46,7 +45,6 @@ def run_pipeline(data: np.ndarray, params: dict):
         "cancelled": cancelled,
         "positions": positions,
         "detection": detection,
-        "tngl_bytes": tngl_bytes,
         "stats": stats,
         "replayed_final": replayed_final,
         "true_final": true_final,
@@ -140,9 +138,9 @@ def main():
         all_passed = False
 
     # ---------------------------------------------------------
-    # Check 4: all three - reduced <= raw, cancelled*2 == raw - reduced, and .tngl round trip
+    # Check 4: all three - reduced <= raw, cancelled*2 == raw - reduced, and final order invariant
     # ---------------------------------------------------------
-    print("\n4. Invariants & Codec Round Trip Check:")
+    print("\n4. Invariants & Final Order Check:")
     datasets_map = {
         "clean": res_clean,
         "drift": res_drift,
@@ -160,7 +158,7 @@ def main():
         pass_name = inv1 and inv2 and rt_ok
         status_name = "PASS" if pass_name else "FAIL"
         print(f"   - {name:5s}: [{status_name}] raw={n_raw}, reduced={n_red}, cancelled={n_canc}, "
-              f"reduced<=raw: {inv1}, 2*cancelled==diff: {inv2}, .tngl roundtrip: {rt_ok}")
+              f"reduced<=raw: {inv1}, 2*cancelled==diff: {inv2}, final_order_ok: {rt_ok}")
         if not pass_name:
             check4_all_pass = False
 

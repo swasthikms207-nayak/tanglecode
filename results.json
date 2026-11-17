@@ -20,19 +20,19 @@
         "crossings_before": 2417,
         "crossings_after": 2417
       },
-      "Hysteresis baseline": {
-        "bytes": 215,
-        "ratio_vs_raw_csv": 630.1581395348837,
-        "ratio_vs_gzip": 230.07906976744187,
+      "Hysteresis swap log CSV": {
+        "bytes": 1244,
+        "ratio_vs_raw_csv": 108.90996784565917,
+        "ratio_vs_gzip": 39.76446945337621,
         "crossings_before": 2417,
         "crossings_after": 111,
         "estimated_noise_std": 0.059703243557982406,
         "h": 0.11940648711596481
       },
-      "TangleCode (with reduction)": {
-        "bytes": 119,
-        "ratio_vs_raw_csv": 1138.5210084033613,
-        "ratio_vs_gzip": 415.6890756302521,
+      "TangleCode swap log CSV": {
+        "bytes": 560,
+        "ratio_vs_raw_csv": 241.93571428571428,
+        "ratio_vs_gzip": 88.33392857142857,
         "crossings_before": 2417,
         "crossings_after": 47
       }
@@ -59,19 +59,19 @@
         "crossings_before": 2027,
         "crossings_after": 2027
       },
-      "Hysteresis baseline": {
-        "bytes": 203,
-        "ratio_vs_raw_csv": 664.8571428571429,
-        "ratio_vs_gzip": 246.2512315270936,
+      "Hysteresis swap log CSV": {
+        "bytes": 1156,
+        "ratio_vs_raw_csv": 116.75259515570934,
+        "ratio_vs_gzip": 43.24307958477509,
         "crossings_before": 2027,
         "crossings_after": 103,
         "estimated_noise_std": 0.059703243557982406,
         "h": 0.11940648711596481
       },
-      "TangleCode (with reduction)": {
-        "bytes": 95,
-        "ratio_vs_raw_csv": 1420.6947368421052,
-        "ratio_vs_gzip": 526.2,
+      "TangleCode swap log CSV": {
+        "bytes": 384,
+        "ratio_vs_raw_csv": 351.4739583333333,
+        "ratio_vs_gzip": 130.1796875,
         "crossings_before": 2027,
         "crossings_after": 31
       }
@@ -98,19 +98,19 @@
         "crossings_before": 2182,
         "crossings_after": 2182
       },
-      "Hysteresis baseline": {
-        "bytes": 220,
-        "ratio_vs_raw_csv": 613.4363636363636,
-        "ratio_vs_gzip": 215.59545454545454,
+      "Hysteresis swap log CSV": {
+        "bytes": 1288,
+        "ratio_vs_raw_csv": 104.77950310559007,
+        "ratio_vs_gzip": 36.82531055900621,
         "crossings_before": 2182,
         "crossings_after": 115,
         "estimated_noise_std": 0.05937946557248082,
         "h": 0.11875893114496164
       },
-      "TangleCode (with reduction)": {
-        "bytes": 101,
-        "ratio_vs_raw_csv": 1336.1980198019803,
-        "ratio_vs_gzip": 469.61386138613864,
+      "TangleCode swap log CSV": {
+        "bytes": 439,
+        "ratio_vs_raw_csv": 307.4168564920273,
+        "ratio_vs_gzip": 108.04328018223235,
         "crossings_before": 2182,
         "crossings_after": 36
       }

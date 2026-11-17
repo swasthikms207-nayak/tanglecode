@@ -9,7 +9,7 @@ from tanglecode.data import generate_signals
 
 
 def test_hysteresis_baseline_logic():
-    """Verify hysteresis swap acceptance thresholding and encoding."""
+    """Verify hysteresis swap acceptance thresholding and swap log export."""
     data = generate_signals("clean", n=6, T=500, seed=7)
     h_count, h_bytes, noise_std, h = run_hysteresis(data, raw_crossings_count=300)
 
@@ -17,8 +17,8 @@ def test_hysteresis_baseline_logic():
     assert h == 2.0 * noise_std
     assert h_count >= 0
     assert len(h_bytes) > 0
-    # Magic bytes check
-    assert h_bytes[:4] == b"TNGL"
+    # Header check
+    assert h_bytes.startswith(b"tick,")
 
 
 def test_benchmark_dataset():
@@ -31,8 +31,8 @@ def test_benchmark_dataset():
     methods = res["methods"]
     assert "Raw CSV" in methods
     assert "gzip (CSV)" in methods
-    assert "Hysteresis baseline" in methods
-    assert "TangleCode (with reduction)" in methods
+    assert "Hysteresis swap log CSV" in methods
+    assert "TangleCode swap log CSV" in methods
 
     for m_name, m_dict in methods.items():
         assert m_dict["bytes"] > 0

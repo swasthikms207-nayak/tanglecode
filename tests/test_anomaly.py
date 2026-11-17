@@ -10,7 +10,6 @@ from tanglecode.braid import (
     replay_orders,
     word_from_frames,
 )
-from tanglecode.codec import decode, encode
 from tanglecode.data import generate_signals
 
 

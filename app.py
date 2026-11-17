@@ -14,8 +14,10 @@ from tanglecode.braid import (
     replay_orders,
     word_from_frames,
 )
-from tanglecode.codec import encode
 from tanglecode.data import generate_signals, load_csv
+from tanglecode.export import swap_log_csv
+from tanglecode.pipeline import compute_stats
+from tanglecode.report import make_report_pdf
 
 def format_ordinal(val: int) -> str:
     n = int(val)
@@ -61,15 +63,6 @@ if st.session_state["page"] == "input":
     )
 
     st.write("")
-    sampling_rate_input = st.number_input(
-        "Sampling rate (Hz), optional",
-        min_value=0.0,
-        value=None,
-        step=1.0,
-        help="Optional sampling rate to convert ticks to seconds.",
-    )
-
-    st.write("")
     if st.button("Analyze", type="primary", use_container_width=True):
         data = None
         raw_csv_bytes = None
@@ -102,7 +95,6 @@ if st.session_state["page"] == "input":
                 st.warning(warning_msg)
 
             T, n = data.shape
-            rate = float(sampling_rate_input) if (sampling_rate_input is not None and sampling_rate_input > 0) else None
             initial_order, raw = word_from_frames(data)
             reduced, cancelled = reduce_crossings(raw)
             positions = replay_orders(initial_order, raw, T)
@@ -118,17 +110,21 @@ if st.session_state["page"] == "input":
                 min_consecutive=4,
             )
 
-            tngl_bytes, stats = encode(data)
+            stats = compute_stats(raw, reduced, cancelled)
+            swap_log_str = swap_log_csv(reduced)
 
             st.session_state["results"] = {
                 "dataset_name": dataset_name,
                 "n_sensors": n,
-                "sampling_rate": rate,
+                "sampling_rate": None,
                 "raw_count": len(raw),
                 "reduced_count": len(reduced),
                 "raw_csv_bytes": raw_csv_bytes,
-                "tngl_bytes": tngl_bytes,
+                "swap_log_str": swap_log_str,
+                "stats": stats,
                 "detection": detection,
+                "data": data,
+                "T": T,
             }
             st.session_state["page"] = "results"
             st.rerun()
@@ -144,7 +140,7 @@ elif st.session_state["page"] == "results":
     raw_count = res["raw_count"]
     reduced_count = res["reduced_count"]
     raw_csv_bytes = res["raw_csv_bytes"]
-    tngl_bytes = res["tngl_bytes"]
+    swap_log_str = res["swap_log_str"]
     dataset_name = res["dataset_name"]
     rate = res.get("sampling_rate")
     n_sensors = res.get("n_sensors", 6)
@@ -166,6 +162,7 @@ elif st.session_state["page"] == "results":
                 f"Fault detected: Sensor {first_fault['faulty_channel']}, "
                 f"around ticks {first_fault['start_tick']} to {first_fault['end_tick']}"
             )
+
 
     # Fault description directly under verdict banner
     pct_removed = ((raw_count - reduced_count) / raw_count * 100.0) if raw_count > 0 else 0.0
@@ -192,6 +189,73 @@ elif st.session_state["page"] == "results":
             )
 
     st.write(desc)
+
+    # Severity pane with distinct color for each severity level
+    if len(ranges) > 0:
+        first_fault = ranges[0]
+        severity = first_fault.get("severity", "Moderate")
+        severity_styles = {
+            "Mild": {
+                "bg": "#fefce8",
+                "border": "#eab308",
+                "badge_bg": "#ca8a04",
+                "text": "#713f12",
+                "icon": "⚠️",
+                "desc": "Mild deviation — score slightly above the alert level.",
+            },
+            "Moderate": {
+                "bg": "#fff7ed",
+                "border": "#f97316",
+                "badge_bg": "#ea580c",
+                "text": "#7c2d12",
+                "icon": "⚡",
+                "desc": "Moderate deviation — score significantly above the alert level.",
+            },
+            "High": {
+                "bg": "#fef2f2",
+                "border": "#ef4444",
+                "badge_bg": "#dc2626",
+                "text": "#7f1d1d",
+                "icon": "🚨",
+                "desc": "High deviation — score far above the alert level.",
+            },
+        }
+        style = severity_styles.get(severity, severity_styles["Moderate"])
+        st.markdown(
+            f"""
+            <div style="
+                background-color: {style['bg']};
+                border: 1px solid {style['border']};
+                border-left: 6px solid {style['border']};
+                border-radius: 8px;
+                padding: 10px 14px;
+                margin: 6px 0 16px 0;
+            ">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 18px;">{style['icon']}</span>
+                        <span style="font-size: 14px; font-weight: 600; color: {style['text']};">
+                            Severity: {severity}
+                        </span>
+                    </div>
+                    <span style="
+                        background-color: {style['badge_bg']};
+                        color: #ffffff;
+                        font-size: 11px;
+                        font-weight: 700;
+                        padding: 2px 8px;
+                        border-radius: 10px;
+                        letter-spacing: 0.5px;
+                    ">{severity.upper()}</span>
+                </div>
+                <div style="font-size: 12px; color: {style['text']}; opacity: 0.85; margin-top: 4px;">
+                    {style['desc']}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     st.write("")
 
     # 2. Three st.metric cards
@@ -210,14 +274,15 @@ elif st.session_state["page"] == "results":
         )
 
     with col3:
-        csv_kb = len(raw_csv_bytes) / 1024.0
-        tngl_kb = len(tngl_bytes) / 1024.0
-        ratio = len(raw_csv_bytes) / len(tngl_bytes) if len(tngl_bytes) > 0 else 1.0
+        orig_kb = len(raw_csv_bytes) / 1024.0
+        swap_log_bytes = swap_log_str.encode("utf-8")
+        swap_kb = len(swap_log_bytes) / 1024.0
+        ratio = len(raw_csv_bytes) / len(swap_log_bytes) if len(swap_log_bytes) > 0 else 1.0
         st.metric(
             label="File size",
-            value=f"{tngl_kb:.1f} KB",
+            value=f"{swap_kb:.1f} KB",
         )
-        st.caption(f"CSV was {csv_kb:.1f} KB ({ratio:.1f}x smaller)")
+        st.caption(f"Original CSV was {orig_kb:.1f} KB ({ratio:.1f} times smaller)")
 
     st.write("")
 
@@ -279,22 +344,52 @@ elif st.session_state["page"] == "results":
 
     st.write("")
 
-    # 4. One download button: "Download compressed file (.tngl)"
+    # Generate and cache PDF fault report in session state
+    if "pdf_bytes" not in res or res["pdf_bytes"] is None:
+        report_stats = dict(res.get("stats", {}))
+        report_stats["raw_csv_bytes"] = raw_csv_bytes
+        report_stats["swap_log_str"] = swap_log_str
+        report_result = dict(detection)
+        report_result["desc"] = desc
+        res["pdf_bytes"] = make_report_pdf(
+            name=dataset_name,
+            n=n_sensors,
+            T=res.get("T", 3000),
+            stats=report_stats,
+            result=report_result,
+            data=res.get("data"),
+            sampling_rate=rate,
+        )
+    pdf_bytes = res["pdf_bytes"]
+
+    # 4. Download buttons: swap log CSV and fault report PDF side-by-side
     base_stem = Path(dataset_name).stem if dataset_name.endswith(".csv") else dataset_name.lower().replace(" ", "_")
-    st.download_button(
-        label="Download compressed file (.tngl)",
-        data=tngl_bytes,
-        file_name=f"{base_stem}.tngl",
-        mime="application/octet-stream",
-        use_container_width=True,
-    )
+    dl_col1, dl_col2 = st.columns(2)
+    with dl_col1:
+        st.download_button(
+            label="Download swap log (CSV)",
+            data=swap_log_str,
+            file_name=f"{base_stem}_swap_log.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+    with dl_col2:
+        st.download_button(
+            label="Download fault report (PDF)",
+            data=pdf_bytes,
+            file_name=f"{base_stem}_fault_report.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
 
     st.write("")
 
     # 5. A small grey note
-    st.caption("This compressed file keeps the order of the sensors, not their exact values.")
+    st.caption("The swap log keeps the order of the sensors, not their exact values.")
 
     st.write("")
+
+
 
     # 6. A "Back" button that clears results and returns to Page 1
     if st.button("Back", use_container_width=True):

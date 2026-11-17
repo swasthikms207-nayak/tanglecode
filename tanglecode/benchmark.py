@@ -3,20 +3,12 @@ from __future__ import annotations
 import gzip
 import json
 from pathlib import Path
-import struct
 from typing import Any
 import numpy as np
 
 from tanglecode.braid import Crossing, order_from_frame, reduce_crossings, word_from_frames
-from tanglecode.codec import (
-    HEADER_STRUCT,
-    MAGIC,
-    MODE_DEFAULT,
-    encode,
-    encode_leb128,
-    pack_generators,
-)
 from tanglecode.data import generate_signals, load_csv
+from tanglecode.export import swap_log_csv
 
 
 def run_hysteresis(
@@ -28,7 +20,7 @@ def run_hysteresis(
     A swap is accepted only if the amplitude gap between the two adjacent
     channels exceeds h = 2 * estimated noise std
     (noise std = median over channels of std(diff(x))/sqrt(2)).
-    Crossings are encoded using the same .tngl codec without braid reduction.
+    Crossings are exported as swap log CSV with NO braid reduction.
 
     Returns:
       (accepted_crossing_count, encoded_bytes, noise_std, h)
@@ -61,29 +53,11 @@ def run_hysteresis(
             if not swapped:
                 break
 
-    # 3. Encode accepted crossings with the same codec and NO braid reduction
-    header = struct.pack(
-        HEADER_STRUCT,
-        MAGIC,
-        n,
-        raw_crossings_count,
-        len(accepted_crossings),
-        T,
-        MODE_DEFAULT,
-    )
-    anchor = struct.pack(f"<{n}f", *data[0])
+    # 3. Export accepted crossings as swap log CSV with NO braid reduction
+    csv_str = swap_log_csv(accepted_crossings)
+    csv_bytes = csv_str.encode("utf-8")
 
-    timing_bytes = bytearray()
-    prev_tick = 0
-    for c in accepted_crossings:
-        delta = c.tick - prev_tick
-        timing_bytes.extend(encode_leb128(delta))
-        prev_tick = c.tick
-
-    payload = pack_generators([c.gen for c in accepted_crossings])
-    encoded_bytes = header + anchor + bytes(timing_bytes) + payload
-
-    return len(accepted_crossings), encoded_bytes, noise_std, h
+    return len(accepted_crossings), csv_bytes, noise_std, h
 
 
 def benchmark_dataset(
@@ -91,7 +65,7 @@ def benchmark_dataset(
     raw_csv_bytes: bytes,
     dataset_name: str,
 ) -> dict[str, Any]:
-    """Benchmark raw CSV, gzip, hysteresis baseline, and TangleCode on a dataset."""
+    """Benchmark raw CSV, gzip, hysteresis baseline, and TangleCode swap log CSV."""
     T, n = data.shape
 
     # 1. Measure raw and reduced crossings
@@ -107,13 +81,14 @@ def benchmark_dataset(
     gzip_bytes = gzip.compress(raw_csv_bytes, compresslevel=6)
     gzip_size = len(gzip_bytes)
 
-    # 4. Hysteresis baseline
+    # 4. Hysteresis baseline swap log CSV
     h_count, h_bytes, noise_std, h = run_hysteresis(data, raw_count)
     h_size = len(h_bytes)
 
-    # 5. TangleCode (with reduction)
-    tngl_bytes, stats = encode(data)
-    tngl_size = len(tngl_bytes)
+    # 5. TangleCode swap log CSV (with reduction)
+    tc_csv_str = swap_log_csv(reduced_crossings)
+    tc_bytes = tc_csv_str.encode("utf-8")
+    tc_size = len(tc_bytes)
 
     methods = {
         "Raw CSV": {
@@ -130,7 +105,7 @@ def benchmark_dataset(
             "crossings_before": raw_count,
             "crossings_after": raw_count,
         },
-        "Hysteresis baseline": {
+        "Hysteresis swap log CSV": {
             "bytes": h_size,
             "ratio_vs_raw_csv": float(raw_csv_size / h_size),
             "ratio_vs_gzip": float(gzip_size / h_size),
@@ -139,10 +114,10 @@ def benchmark_dataset(
             "estimated_noise_std": noise_std,
             "h": h,
         },
-        "TangleCode (with reduction)": {
-            "bytes": tngl_size,
-            "ratio_vs_raw_csv": float(raw_csv_size / tngl_size),
-            "ratio_vs_gzip": float(gzip_size / tngl_size),
+        "TangleCode swap log CSV": {
+            "bytes": tc_size,
+            "ratio_vs_raw_csv": float(raw_csv_size / tc_size),
+            "ratio_vs_gzip": float(gzip_size / tc_size),
             "crossings_before": raw_count,
             "crossings_after": reduced_count,
         },
